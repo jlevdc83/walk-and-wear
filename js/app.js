@@ -1,4 +1,4 @@
-const VERSION = "v58";
+const VERSION = "v59";
 const REFRESH_MS = 20 * 60 * 1000;
 const RETRY_MS = 60 * 1000;      // after a transient failure — not the full refresh interval
 const RUN_HOT = true;
@@ -138,7 +138,10 @@ async function geocodeZip(zip){
   const j = await r.json();
   const hit = j?.results?.[0];
   if (!hit) throw new Error("ZIP_NOT_FOUND");
-  return { lat: hit.latitude, lon: hit.longitude, zip: clean };
+  // The response already carries the place name. Showing "Anchorage, Alaska" instead of
+  // "ZIP 99501" also confirms the code resolved where you expected.
+  const name = hit.admin1 ? `${hit.name}, ${hit.admin1}` : (hit.name || "");
+  return { lat: hit.latitude, lon: hit.longitude, zip: clean, name };
 }
 // Open-Meteo's geocoding API has no reverse endpoint — /v1/reverse returns
 // {"error":true,"reason":"Not Found"}. The old call was wrapped in a try/catch that
@@ -186,9 +189,10 @@ function geolocate(){
 // card in the page — window.prompt() is suppressed in an iOS standalone PWA, which
 // left the app with no reachable way to supply a location at all.
 async function resolveLocation(){
-  if (!isLikelyLocalFile() && window.isSecureContext && navigator.geolocation) {
-    try { return await geolocate(); } catch { /* fall through to ZIP */ }
-  }
+  // A saved ZIP is a deliberate choice and outranks the device. Trying GPS first meant
+  // a manually set ZIP was silently ignored whenever location happened to work — which
+  // made changing location impossible in the one case that matters.
+  // "Use my location" clears the ZIP, which is what puts the device back in charge.
   const saved = localStorage.getItem("dashboard_zip") || "";
   if (saved) {
     try {
@@ -196,6 +200,9 @@ async function resolveLocation(){
     } catch {
       localStorage.removeItem("dashboard_zip"); // stale or wrong — stop trusting it
     }
+  }
+  if (!isLikelyLocalFile() && window.isSecureContext && navigator.geolocation) {
+    try { return await geolocate(); } catch { /* fall through */ }
   }
   throw new Error("NEEDS_LOCATION");
 }
@@ -205,14 +212,38 @@ function showLocate(message){
   $("decisions").classList.add("hidden");
   // Also hide the weather strip: a row of em-dashes reads as broken rather than empty.
   $("weather").classList.add("hidden");
+  $("cancelLocate").classList.add("hidden");   // nothing to go back to
   if (message) $("locateNote").textContent = message;
   $("updatedLine").textContent = "Location needed";
   $("zipMeta").textContent = "No location";
 }
+
+/// Opened deliberately from the header rather than by a failure. There is still good
+/// data underneath, so this one is cancellable and prefilled.
+function openLocate(){
+  $("locateCard").classList.remove("hidden");
+  $("decisions").classList.add("hidden");
+  $("weather").classList.add("hidden");
+  $("cancelLocate").classList.remove("hidden");
+  const saved = localStorage.getItem("dashboard_zip") || "";
+  $("zipInput").value = saved;
+  $("locateNote").textContent = saved
+    ? `Currently using ZIP ${saved}. Enter another, or switch back to your location.`
+    : "Enter a ZIP code, or keep using your device location.";
+}
+
 function hideLocate(){
   $("locateCard").classList.add("hidden");
   $("decisions").classList.remove("hidden");
   $("weather").classList.remove("hidden");
+}
+
+/// A location change invalidates the cached city name and the cached forecast — both
+/// describe the old place. Leaving them would show the previous city's weather under
+/// the new ZIP until the next refresh landed.
+function forgetPlace(){
+  localStorage.removeItem("dashboard_place");
+  localStorage.removeItem(SNAP_KEY);
 }
 
 /* --- Forecast --------------------------------------------------------- */
@@ -645,7 +676,7 @@ async function refresh(){
     const now = new Date();
     const loc = await resolveLocation();
     hideLocate();
-    setZipMeta(loc.zip || await placeName(loc));
+    setZipMeta(loc.name || loc.zip || await placeName(loc));
 
     const forecast = await fetchForecast(loc.lat, loc.lon);
     saveSnapshot(forecast, loc);
@@ -696,6 +727,7 @@ $("locateForm").addEventListener("submit", async (event) => {
   try {
     await geocodeZip(zip);            // validate before storing, so a typo can't stick
     localStorage.setItem("dashboard_zip", zip);
+    forgetPlace();
     hideLocate();
     refresh();
   } catch {
@@ -703,10 +735,21 @@ $("locateForm").addEventListener("submit", async (event) => {
   }
 });
 
+// Drops the saved ZIP so resolveLocation falls back to the device again.
 $("retryLocation").addEventListener("click", () => {
+  localStorage.removeItem("dashboard_zip");
+  forgetPlace();
   $("locateNote").textContent = "Asking for location…";
+  hideLocate();
   refresh();
 });
+
+$("cancelLocate").addEventListener("click", () => {
+  hideLocate();
+  updateMinutesSince();
+});
+
+$("zipMeta").addEventListener("click", openLocate);
 
 window.clearSavedZip = function(){
   localStorage.removeItem("dashboard_zip");
