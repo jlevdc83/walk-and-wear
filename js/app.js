@@ -148,6 +148,27 @@ async function geocodeZip(zip){
 // wanted, BigDataCloud's reverse-geocode-client is free, keyless and CORS-enabled —
 // that would be the place to add it.
 const DEVICE_LOCATION_LABEL = "Device location";
+
+// BigDataCloud's reverse-geocode-client: no key, CORS-enabled, and unlike Open-Meteo's
+// non-existent /v1/reverse it actually exists. Cached, because the answer only changes
+// when you move — and it degrades to the honest label rather than to an em-dash.
+async function placeName(loc){
+  const cached = localStorage.getItem("dashboard_place");
+  if (cached) return cached;
+  try {
+    const url = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${loc.lat}&longitude=${loc.lon}&localityLanguage=en`;
+    const r = await fetch(url, { cache: "no-store" });
+    if (!r.ok) throw new Error("REVERSE_FAILED");
+    const j = await r.json();
+    const city = j.city || j.locality || "";
+    const region = j.principalSubdivisionCode ? String(j.principalSubdivisionCode).split("-").pop() : "";
+    const name = city ? (region ? `${city}, ${region}` : city) : "";
+    if (name) localStorage.setItem("dashboard_place", name);
+    return name || DEVICE_LOCATION_LABEL;
+  } catch {
+    return DEVICE_LOCATION_LABEL;
+  }
+}
 function isLikelyLocalFile(){
   return window.location.protocol === "file:";
 }
@@ -398,16 +419,10 @@ function walkAssessment(hourly, idx, now, nextSun, tempF, isDay, cloud, uv, hori
 
 /* --- Render ----------------------------------------------------------- */
 
-async function refresh(){
-  clearTimeout(retryTimer);
-  try {
-    const now = new Date();
-    const loc = await resolveLocation();
-    hideLocate();
-
-    setZipMeta(loc.zip || DEVICE_LOCATION_LABEL);
-    const forecast = await fetchForecast(loc.lat, loc.lon);
-
+// Pure render: data in, DOM out. Split from refresh() so a cached snapshot can paint
+// at launch without waiting on the network — this is a dashboard opened half-awake,
+// and a blank screen while a request flies is the wrong first impression.
+function render(forecast, loc, now){
     const h = forecast.hourly;
     const d = forecast.daily;
     const idx = sameHourIndex(h.time, now);
@@ -441,7 +456,10 @@ async function refresh(){
       // Label carries the event so the value is just a time — "Sunset 8:24 PM" was
       // too wide for a quarter column and truncated to "Sunset 8:…".
       { k: nextSun ? nextSun.label : "Next sun", v: nextSun ? fmtShortTime(nextSun.time) : "—", b: `Hi ${round(hi)}° / Lo ${round(lo)}°` },
-      { k: "Rain", v: `${round(rain4h)}%`, b: "next 4h" },
+      // Same window the Bring decision uses. Reporting a 4-hour peak here while the
+      // umbrella was decided on a 3-hour one produced "RAIN 74%" with no umbrella
+      // advice — two numbers from different windows, reading as a contradiction.
+      { k: "Rain", v: `${round(horizon.peak90)}%`, b: "next 3h" },
       { k: "Wind", v: `${round(wind)} mph`, b: "current" }
     ]);
 
@@ -485,6 +503,42 @@ async function refresh(){
     $("walkPrimary").textContent = walk.primary;
     $("walkSecondary").textContent = walk.secondary;
     $("walkTertiary").textContent = walk.tertiary;
+}
+
+/* --- Snapshot cache ---------------------------------------------------- */
+
+const SNAP_KEY = "dashboard_snapshot";
+const SNAP_MAX_AGE_MS = 12 * 60 * 60 * 1000;   // the forecast covers ~48h; 12h stays safely in range
+
+function saveSnapshot(forecast, loc){
+  try {
+    localStorage.setItem(SNAP_KEY, JSON.stringify({ at: Date.now(), loc, forecast }));
+  } catch { /* quota or private mode — the app works fine without it */ }
+}
+
+function readSnapshot(){
+  try {
+    const snap = JSON.parse(localStorage.getItem(SNAP_KEY) || "null");
+    if (!snap || !snap.forecast || (Date.now() - snap.at) > SNAP_MAX_AGE_MS) return null;
+    return snap;
+  } catch {
+    return null;
+  }
+}
+
+/* --- Refresh ----------------------------------------------------------- */
+
+async function refresh(){
+  clearTimeout(retryTimer);
+  try {
+    const now = new Date();
+    const loc = await resolveLocation();
+    hideLocate();
+    setZipMeta(loc.zip || await placeName(loc));
+
+    const forecast = await fetchForecast(loc.lat, loc.lon);
+    saveSnapshot(forecast, loc);
+    render(forecast, loc, now);
 
     lastRefreshTime = Date.now();
     updateMinutesSince();
@@ -495,9 +549,26 @@ async function refresh(){
       showLocate("Allow location, or enter a ZIP code to continue.");
     } else {
       // Transient: network, or the forecast endpoint. Come back in a minute, not twenty.
-      $("updatedLine").textContent = "Couldn't load — retrying";
+      // If a cached reading is already on screen it stays there; "Updated N min ago"
+      // is doing the honest work of saying how old it is.
+      $("updatedLine").textContent = lastRefreshTime ? "Offline — showing last reading" : "Couldn't load — retrying";
       retryTimer = setTimeout(refresh, RETRY_MS);
     }
+  }
+}
+
+// Paint the last known reading immediately, before any network call.
+function bootFromCache(){
+  const snap = readSnapshot();
+  if (!snap) return false;
+  try {
+    render(snap.forecast, snap.loc, new Date());
+    setZipMeta(snap.loc?.zip || localStorage.getItem("dashboard_place") || DEVICE_LOCATION_LABEL);
+    lastRefreshTime = snap.at;
+    updateMinutesSince();
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -528,12 +599,23 @@ $("retryLocation").addEventListener("click", () => {
 
 window.clearSavedZip = function(){
   localStorage.removeItem("dashboard_zip");
+  localStorage.removeItem("dashboard_place");
+  localStorage.removeItem(SNAP_KEY);
   location.reload();
 };
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js").catch(() => { /* http:// or unsupported */ });
+  });
+}
 
 renderVersionTag();
 updateClock();
 startTickers();
+// Cache first, network second: something readable is on screen before the request
+// leaves. If the cache is empty or stale this is a no-op and refresh() fills it in.
+bootFromCache();
 refresh();
 clearInterval(refreshTimer);
 refreshTimer = setInterval(refresh, REFRESH_MS);

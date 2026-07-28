@@ -184,7 +184,16 @@ body {
   gap: var(--gap);
   min-height: 0;
 }
-.decision { display: flex; flex-direction: column; }
+/* Cards take a share of the spare column, but capped. Uncapped they ballooned to
+   700px around 200px of content; content-sized they left a void above the weather
+   strip. The cap splits the difference. */
+.decision {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  flex: 1 1 auto;
+  max-height: 32vh;
+}
 
 .verdict {
   margin: 0;
