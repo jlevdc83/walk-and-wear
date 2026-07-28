@@ -184,15 +184,14 @@ body {
   gap: var(--gap);
   min-height: 0;
 }
-/* Cards take a share of the spare column, but capped. Uncapped they ballooned to
-   700px around 200px of content; content-sized they left a void above the weather
-   strip. The cap splits the difference. */
+/* Content-sized. The earlier cap existed because two short cards ballooned into the
+   column; with the hourly outlook the walk card now carries enough to fill its own
+   space, and capping it would clip the strip. */
 .decision {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  flex: 1 1 auto;
-  max-height: 32vh;
+  flex: 0 0 auto;
 }
 
 .verdict {
@@ -215,6 +214,42 @@ body {
   border-top: 1px solid var(--glass-rim-low);
 }
 .tip:empty { display: none; }
+
+/* Hourly outlook. Ten bars, one per hour, coloured by the same verdict the headline
+   uses — so the shape of the day is readable without parsing any text. */
+.outlook {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: 3px;
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--glass-rim-low);
+}
+.hour {
+  height: 26px;
+  border-radius: 5px;
+  background: var(--soft);
+  opacity: .3;
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.hour.walk-ideal, .hour.walk-golden { background: #6ee7b7; opacity: .9; }
+.hour.walk-warm                     { background: #fcd34d; opacity: .85; }
+.hour.walk-cold                     { background: #93c5fd; opacity: .8; }
+.hour.walk-paw                      { background: #fb923c; opacity: .9; }
+.hour.walk-rain-alert               { background: #a5b4fc; opacity: .85; }
+.hour .tick {
+  position: absolute;
+  bottom: -15px;
+  font-family: var(--mono);
+  font-size: .52rem;
+  color: var(--soft);
+  white-space: nowrap;
+}
+.outlook { padding-bottom: 15px; }   /* room for the hour ticks below the bars */
 
 /* Walk state. A tint in the rim rather than a coloured glow — the material carries
    the state, it doesn't get a badge stuck on it. */

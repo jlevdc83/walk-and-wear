@@ -1,4 +1,4 @@
-const VERSION = "v57";
+const VERSION = "v58";
 const REFRESH_MS = 20 * 60 * 1000;
 const RETRY_MS = 60 * 1000;      // after a transient failure — not the full refresh interval
 const RUN_HOT = true;
@@ -362,6 +362,89 @@ function walkDecision(feelsLikeF, pawRisk, rainingNow, windMph, horizon){
   // Anything left is between 20° and 55°: fine, just cold.
   return { label: "🐕 Okay now", cls: "walk-cold" };
 }
+/* --- Walk outlook ------------------------------------------------------
+   Mackenzie goes out several times a day, so "is now good?" is the wrong
+   question on its own — the useful answer is when the next good window is.
+   The forecast already carries 48 hours; only the current hour was ever read.
+   This runs the same tuned verdict across the coming hours. No new data. */
+
+const OUTLOOK_HOURS = 10;
+
+/// The verdict for an arbitrary hour, not just the current one.
+function walkStateAt(h, i, now){
+  const feels = h.apparent_temperature?.[i];
+  if (feels == null) return null;
+
+  const temp  = h.temperature_2m?.[i] ?? feels;
+  const wind  = h.windspeed_10m?.[i] ?? 0;
+  const cloud = h.cloudcover?.[i] ?? 0;
+  const uv    = h.uv_index?.[i] ?? 0;
+  const isDay = !!h.is_day?.[i];
+  const raining = (h.precipitation?.[i] ?? 0) > 0;
+
+  // Horizon measured forward from that hour, not from now.
+  const at = new Date(h.time[i]);
+  const horizon = sharedDepartureWindow(h, i, at);
+  const risk = estimatePawRisk(temp, isDay, cloud, uv);
+  const decision = walkDecision(feels, risk, raining, wind, horizon);
+
+  return {
+    time: at,
+    state: decision.cls,
+    label: decision.label,
+    walkable: !decision.label.includes("Wait"),
+  };
+}
+
+function walkOutlook(h, idx, now){
+  const out = [];
+  for (let i = idx; i < idx + OUTLOOK_HOURS; i++) {
+    const s = walkStateAt(h, i, now);
+    if (s) out.push(s);
+  }
+  return out;
+}
+
+/// Either how long the current good spell lasts, or when the next one starts.
+function walkTiming(outlook){
+  if (!outlook.length) return null;
+
+  if (outlook[0].walkable) {
+    let i = 0;
+    while (i < outlook.length && outlook[i].walkable) i++;
+    // Ran to the end of what we looked at — don't imply a cliff that isn't there.
+    if (i >= outlook.length) return { kind: "open" };
+    return { kind: "until", time: outlook[i].time };
+  }
+
+  const start = outlook.findIndex(s => s.walkable);
+  if (start === -1) return { kind: "none" };
+
+  // How long that window actually lasts. "Better from 5 PM" is misleading if rain
+  // closes it again at 6 — and a one-hour gap is exactly what you need to know about
+  // when the dog goes out several times a day.
+  let end = start;
+  while (end < outlook.length && outlook[end].walkable) end++;
+
+  return {
+    kind: "next",
+    time: outlook[start].time,
+    until: end < outlook.length ? outlook[end].time : null,
+    hours: end - start,
+  };
+}
+
+function renderOutlook(outlook){
+  const el = $("outlook");
+  if (!el) return;
+  el.innerHTML = outlook.map((s, i) => {
+    const hour = new Intl.DateTimeFormat([], { hour: "numeric" }).format(s.time);
+    // Label every third hour; more than that is noise at this width.
+    const tick = (i % 3 === 0) ? `<span class="tick">${hour}</span>` : "";
+    return `<div class="hour ${s.state}" title="${hour} — ${s.label}">${tick}</div>`;
+  }).join("");
+}
+
 function nextSunEvent(daily, now){
   const candidates = [];
   for (let i = 0; i < Math.min(2, daily.sunrise.length); i++) {
@@ -501,8 +584,36 @@ function render(forecast, loc, now){
     walkCard.className = "card glass decision walk";
     if (walk.cls) walkCard.classList.add(walk.cls);
     $("walkPrimary").textContent = walk.primary;
-    $("walkSecondary").textContent = walk.secondary;
-    $("walkTertiary").textContent = walk.tertiary;
+
+    // The timing is more actionable than the reason, so it takes the supporting line
+    // and the reason moves down. "Wait now" is useless without "until when".
+    const outlook = walkOutlook(h, idx, now);
+    const phrase = timingPhrase(walkTiming(outlook));
+    let support = walk.secondary;
+    let aside = walk.tertiary;
+    if (phrase) {
+      support = phrase;
+      if (walk.secondary && walk.secondary !== "Good right now") {
+        aside = aside ? `${walk.secondary} • ${aside}` : walk.secondary;
+      }
+    }
+    $("walkSecondary").textContent = support;
+    $("walkTertiary").textContent = aside;
+    renderOutlook(outlook);
+}
+
+function timingPhrase(timing){
+  if (!timing) return "";
+  switch (timing.kind) {
+    case "until": return `Good until ${fmtShortTime(timing.time)}`;
+    case "next":
+      // A short window gets both ends; a long one only needs its start.
+      return (timing.until && timing.hours <= 2)
+        ? `Window ${fmtShortTime(timing.time)}–${fmtShortTime(timing.until)}`
+        : `Better from ${fmtShortTime(timing.time)}`;
+    case "none":  return `Nothing good for ${OUTLOOK_HOURS}h`;
+    default:      return "";   // "open" — good throughout, no cliff to warn about
+  }
 }
 
 /* --- Snapshot cache ---------------------------------------------------- */
