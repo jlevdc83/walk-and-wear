@@ -1,563 +1,426 @@
-*{box-sizing:border-box}
-html,body{margin:0;height:100%;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display",system-ui,sans-serif;overflow:hidden}
-:root{
-  --fg:#ffffff;
-  --muted:rgba(255,255,255,.74);
-  --soft:rgba(255,255,255,.56);
-  --stroke:rgba(255,255,255,.14);
-  --glass:rgba(255,255,255,.08);
-  --glass2:rgba(255,255,255,.045);
-  --shadow:0 18px 40px rgba(0,0,0,.22);
-  --radius:24px;
-  --gap:10px;
+/* Walk & Wear — decision-first briefing, rendered in Liquid Glass.
+   ---------------------------------------------------------------------------
+   The material, as the web can express it:
 
-  --bgA:#22334f;
-  --bgB:#3b557e;
-  --bgGlow1:rgba(180,215,255,.35);
-  --bgGlow2:rgba(255,255,255,.10);
-  --bgGlow3:rgba(255,196,143,.12);
-}
-body{
-  color:var(--fg);
-  background:
-    linear-gradient(180deg,var(--bgA),var(--bgB));
-}
-.bgScene{
-  position:fixed; inset:0; overflow:hidden; pointer-events:none;
-  background:
-    radial-gradient(900px 520px at 50% -6%, var(--bgGlow1), transparent 58%),
-    radial-gradient(760px 500px at 18% 18%, var(--bgGlow2), transparent 60%),
-    radial-gradient(860px 580px at 82% 26%, var(--bgGlow3), transparent 64%),
-    linear-gradient(180deg,var(--bgA) 0%, var(--bgB) 100%);
-  transition:background .9s ease;
-}
-.orb{
-  position:absolute; border-radius:999px; filter:blur(48px); opacity:.5;
-}
-.orb1{width:46vw;height:32vw;left:-8vw;top:-3vw;background:rgba(255,255,255,.10)}
-.orb2{width:42vw;height:28vw;right:-8vw;top:10vh;background:rgba(255,255,255,.08)}
-.orb3{width:48vw;height:34vw;left:26vw;bottom:-14vw;background:rgba(255,210,170,.08)}
+     1. Backdrop blur + saturation boost          -> the body of the glass
+     2. A rim element with heavier blur and scale -> edge lensing; content
+                                                     compresses at the boundary
+                                                     the way it does through a lens
+     3. Asymmetric inset highlights               -> specular catch, bright along
+                                                     the top edge, faint along the base
+     4. A soft outer shadow                       -> it floats above the content plane
 
-.app{
-  position:relative;
-  z-index:1;
-  height:100dvh;
+   True Liquid Glass refracts on the GPU natively. Points 1–3 approximate that;
+   nothing on the web reproduces it exactly, so this reads as the material rather
+   than replicating it.
+
+   Apple's rules that actually constrain this file:
+     - Glass is the functional layer floating over content. Never glass on glass.
+     - Corner radii nest concentrically: inner = outer − padding.
+     - Reduce Transparency and Increase Contrast must fall back to opaque.
+*/
+
+*, *::before, *::after { box-sizing: border-box; }
+
+:root {
+  --sys: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+
+  /* Concentric radii: a chip inside a card inside the app. */
+  --r-card: 26px;
+  --r-chip: 16px;
+  --r-control: 14px;
+  --gap: 10px;
+
+  /* Glass constants.
+     --------------------------------------------------------------------
+     Measured off the real material: a SwiftUI .glassEffect() panel rendered
+     over known black/white/grey bands in the iOS 26.5 simulator, sampled in
+     pixels. Light appearance:
+
+       REGULAR  out = 0.238 x in + 179   (keeps 24% of backdrop range)
+       CLEAR    out = 1.005 x in +  10   (keeps 101%, flat +10 lift)
+
+     The headline: Regular is NOT a translucent overlay. It *compresses the
+     backdrop's dynamic range to about a quarter* and lifts it into a narrow
+     light band. That is why text stays legible on it over any wallpaper —
+     the luminance underneath is made predictable, not merely blurred.
+
+     CSS reproduces that as contrast() on the backdrop plus a white overlay:
+     c(1-a) = 0.238 with a = .6, c = .6 fits the measured line closely. */
+  --glass-blur: 24px;
+  --glass-sat: 180%;
+  --glass-contrast: 1;          /* Clear-like by default */
+  --glass-tint: rgba(255, 255, 255, .12);
+  --glass-rim: rgba(255, 255, 255, .55);
+  --glass-rim-low: rgba(255, 255, 255, .12);
+  --glass-shadow: 0 12px 32px rgba(8, 14, 28, .28);
+
+  /* Per-phase, overridden below. */
+  --skyTop: #17233a;
+  --skyBottom: #304868;
+  --ink: #ffffff;
+  --muted: rgba(255, 255, 255, .74);
+  --soft: rgba(255, 255, 255, .52);
+  --accent: #ffd79a;
+}
+
+html, body { margin: 0; min-height: 100%; }
+
+body {
+  font-family: var(--sys);
+  color: var(--ink);
+  background: linear-gradient(178deg, var(--skyTop) 0%, var(--skyBottom) 100%);
+  background-attachment: fixed;
+  -webkit-font-smoothing: antialiased;
+  transition: background .9s ease;
+}
+
+/* --- The light behind the glass --------------------------------------- */
+
+.sky { position: fixed; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; }
+.lum { position: absolute; border-radius: 50%; filter: blur(60px); opacity: .55; }
+.lum1 { width: 62vw; height: 62vw; left: -18vw; top: -12vh; background: var(--lum1); }
+.lum2 { width: 54vw; height: 54vw; right: -16vw; top: 18vh; background: var(--lum2); }
+.lum3 { width: 70vw; height: 70vw; left: 12vw; bottom: -22vh; background: var(--lum3); }
+
+.app {
+  position: relative;
+  z-index: 1;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
   padding:
-    max(12px, env(safe-area-inset-top))
-    max(12px, env(safe-area-inset-right))
-    max(12px, env(safe-area-inset-bottom))
-    max(24px, calc(env(safe-area-inset-left) + 12px));
-}
-.layout{
-  height:100%;
-  display:grid;
-  grid-template-rows:auto 1fr;
-  gap:var(--gap);
-}
-.card{
-  min-width:0;
-  border-radius:var(--radius);
-  border:1px solid var(--stroke);
-  background:
-    linear-gradient(180deg, rgba(255,255,255,.14), rgba(255,255,255,.05)),
-    radial-gradient(140px 90px at 14% 0%, rgba(255,255,255,.22), transparent 70%),
-    var(--glass);
-  backdrop-filter:blur(24px) saturate(1.15);
-  -webkit-backdrop-filter:blur(24px) saturate(1.15);
-  box-shadow:var(--shadow);
-  overflow:hidden;
-}
-.nowCard{
-  padding:16px 18px 14px;
-}
-.topRow{
-  display:flex; align-items:flex-start; justify-content:space-between; gap:12px;
-}
-.timeNow{
-  font-size:28px; line-height:1; font-weight:850; letter-spacing:-.03em;
-}
-.metaTopRight{
-  display:flex; flex-direction:column; align-items:flex-end; gap:2px; text-align:right;
-}
-.updated,.zipMeta{
-  font-size:11px; color:var(--muted); font-weight:700; white-space:nowrap;
-}
-.tempRow{
-  margin-top:12px;
-  display:flex; align-items:flex-end; gap:10px;
-}
-.temp{
-  font-size:60px; font-weight:900; letter-spacing:-.07em; line-height:.88;
-}
-.feels{
-  font-size:16px; color:var(--muted); font-weight:700; padding-bottom:9px;
-}
-.modeBadge{
-  margin-left:auto;
-  min-width:44px; height:44px; padding:0 10px;
-  border-radius:15px;
-  display:flex; align-items:center; justify-content:center;
-  border:1px solid rgba(255,255,255,.10);
-  background:rgba(255,255,255,.07);
-  font-size:19px;
-}
-.condition{
-  margin-top:6px;
-  font-size:17px; line-height:1.05; font-weight:800;
-}
-.ambient{
-  margin-top:4px;
-  font-size:11px; color:var(--muted); font-weight:700;
-}
-.stats{
-  margin-top:10px;
-  display:grid; grid-template-columns:1fr 1fr; gap:8px 10px;
-  opacity:.84;
-}
-.stat{
-  min-width:0;
-  padding:6px 8px;
-  border-radius:16px;
-  background:rgba(255,255,255,.035);
-  border:1px solid rgba(255,255,255,.06);
-}
-.statLabel{
-  font-size:9px; letter-spacing:.12em; text-transform:uppercase; color:var(--soft); font-weight:800;
-}
-.statValue{
-  margin-top:4px; font-size:13px; font-weight:700;
-  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
-}
-.statSub{
-  margin-top:2px; font-size:10px; color:var(--muted);
-  white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    max(14px, env(safe-area-inset-top))
+    max(14px, env(safe-area-inset-right))
+    max(14px, env(safe-area-inset-bottom))
+    max(14px, env(safe-area-inset-left));
 }
 
-.actionsGrid{
-  min-height:0;
-  display:grid;
-  grid-template-columns:1fr 1fr;
-  gap:var(--gap);
-}
-.action{
-  padding:16px;
-  display:flex; flex-direction:column; justify-content:flex-start;
-}
-.cardLabel{
-  font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:var(--soft); font-weight:800;
-}
-.actionValue{
-  margin-top:8px;
-  font-size:26px; font-weight:820; letter-spacing:-.03em; line-height:1.02;
-  text-wrap:balance;
-}
-.jacketPrimary{font-size:29px; font-weight:900}
-.actionSub{
-  margin-top:6px; font-size:12px; color:var(--muted); font-weight:700; line-height:1.2;
-}
-.clothesSecondary{font-size:13px; opacity:.82}
-.tertiary{color:var(--soft)}
-.hidden{display:none!important}
+.hidden { display: none !important; }
 
-.actionsGrid .card{
-  transform:translateY(-1px);
+/* --- The material ------------------------------------------------------ */
+
+/* Apple's kit records "corner smoothing 60%" — these are squircles (continuous
+   curvature), not circular-arc corners. `corner-shape` lands in Safari 26+, which is
+   exactly the browser this targets; anything older simply gets the plain radius. */
+.glass, .zipInput, .zipSubmit {
+  corner-shape: squircle;
+}
+
+.glass {
+  position: relative;
+  isolation: isolate;
+  background: var(--glass-tint);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat)) contrast(var(--glass-contrast));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat)) contrast(var(--glass-contrast));
   box-shadow:
-    0 18px 34px rgba(0,0,0,.22),
-    0 1px 0 rgba(255,255,255,.05) inset;
-  background:
-    linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,.045)),
-    radial-gradient(110px 70px at 16% 0%, rgba(255,255,255,.16), transparent 70%),
-    var(--glass2);
+    var(--glass-shadow),
+    inset 0 1px 0 0 var(--glass-rim),          /* specular catch along the top */
+    inset 0 -1px 0 0 var(--glass-rim-low);     /* faint return light off the base */
 }
 
-.walkCard{transition:background .6s ease, box-shadow .5s ease, transform .35s ease}
-.walk-ideal{box-shadow:0 18px 34px rgba(0,0,0,.22), 0 0 0 1px rgba(120,255,200,.12) inset}
-.walk-golden{box-shadow:0 18px 34px rgba(0,0,0,.22), 0 0 0 1px rgba(255,214,132,.14) inset}
-.walk-warm{box-shadow:0 18px 34px rgba(0,0,0,.22), 0 0 0 1px rgba(255,184,120,.12) inset}
-.walk-cold{box-shadow:0 18px 34px rgba(0,0,0,.22), 0 0 0 1px rgba(140,200,255,.12) inset}
-.walk-paw{box-shadow:0 18px 34px rgba(0,0,0,.22), 0 0 0 1px rgba(255,150,120,.15) inset}
-@keyframes softPulse{
-  0%{transform:translateY(-1px)}
-  50%{transform:translateY(-2px)}
-  100%{transform:translateY(-1px)}
-}
-.walk-rain-alert{animation:softPulse 3s ease-in-out infinite}
-
-body.phase-dawn{
-  --bgA:#32486f;
-  --bgB:#8ea6c6;
-  --bgGlow1:rgba(255,214,168,.28);
-  --bgGlow2:rgba(248,250,255,.16);
-  --bgGlow3:rgba(255,186,137,.16);
-}
-body.phase-day{
-  --bgA:#4f79aa;
-  --bgB:#88acd5;
-  --bgGlow1:rgba(225,241,255,.28);
-  --bgGlow2:rgba(255,255,255,.16);
-  --bgGlow3:rgba(173,210,255,.16);
-}
-body.phase-dusk{
-  --bgA:#425683;
-  --bgB:#8f7aa0;
-  --bgGlow1:rgba(255,204,158,.22);
-  --bgGlow2:rgba(245,235,255,.12);
-  --bgGlow3:rgba(214,160,255,.12);
-}
-body.phase-night{
-  --bgA:#17233a;
-  --bgB:#304868;
-  --bgGlow1:rgba(170,196,255,.14);
-  --bgGlow2:rgba(255,255,255,.06);
-  --bgGlow3:rgba(93,140,214,.10);
+/* Edge lensing. A ring masked to the perimeter, blurring harder than the body, so
+   the backdrop compresses at the boundary instead of stopping flat at the border. */
+.glass::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.5px;
+  backdrop-filter: blur(calc(var(--glass-blur) * 2)) saturate(140%);
+  -webkit-backdrop-filter: blur(calc(var(--glass-blur) * 2)) saturate(140%);
+  background: linear-gradient(150deg, var(--glass-rim), transparent 42%, transparent 62%, var(--glass-rim-low));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  z-index: -1;
 }
 
-@media (orientation:landscape){
-  .layout{
-    grid-template-columns:minmax(300px,.92fr) minmax(0,1.14fr);
-    grid-template-rows:1fr;
+/* --- Bar --------------------------------------------------------------- */
+
+.bar {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 2px 6px;
+}
+
+.clock {
+  font-family: var(--mono);
+  font-size: clamp(1.5rem, 6vw, 2rem);
+  font-weight: 600;
+  letter-spacing: -.03em;
+  font-variant-numeric: tabular-nums;
+  text-shadow: 0 1px 12px rgba(8, 14, 28, .3);
+}
+.barMeta { text-align: right; font-family: var(--mono); font-size: .68rem; line-height: 1.5; }
+.place { color: var(--muted); }
+.updated { color: var(--soft); }
+
+/* --- Cards ------------------------------------------------------------- */
+
+.card { border-radius: var(--r-card); padding: 18px 20px; }
+
+.cardLabel {
+  margin: 0 0 8px;
+  font-family: var(--mono);
+  font-size: .66rem;
+  font-weight: 600;
+  letter-spacing: .2em;
+  text-transform: uppercase;
+  color: var(--soft);
+}
+
+.decisions {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: var(--gap);
+  min-height: 0;
+}
+.decision { display: flex; flex-direction: column; }
+
+.verdict {
+  margin: 0;
+  font-size: clamp(1.9rem, 8.5vw, 2.9rem);
+  font-weight: 600;
+  line-height: 1.04;
+  letter-spacing: -.035em;
+  text-wrap: balance;
+}
+.support { margin: 8px 0 0; font-size: 1.02rem; color: var(--muted); }
+.aside { margin: 3px 0 0; font-size: .84rem; color: var(--soft); }
+.aside:empty { display: none; }
+
+.tip {
+  margin: 12px 0 0;
+  padding-top: 10px;
+  font-size: .8rem;
+  color: var(--muted);
+  border-top: 1px solid var(--glass-rim-low);
+}
+.tip:empty { display: none; }
+
+/* Walk state. A tint in the rim rather than a coloured glow — the material carries
+   the state, it doesn't get a badge stuck on it. */
+.walk { transition: box-shadow .5s ease; }
+.walk-ideal      { --glass-rim: rgba(150, 255, 214, .62); }
+.walk-golden     { --glass-rim: rgba(255, 219, 148, .72); }
+.walk-warm       { --glass-rim: rgba(255, 196, 140, .62); }
+.walk-cold       { --glass-rim: rgba(168, 214, 255, .62); }
+.walk-paw        { --glass-rim: rgba(255, 164, 132, .78); }
+.walk-rain-alert { --glass-rim: rgba(176, 206, 255, .74); }
+
+/* --- Chips: concentric inside the decision column ---------------------- */
+
+.chips { display: flex; flex-wrap: wrap; gap: var(--gap); }
+.chip {
+  flex: 1 1 46%;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-radius: var(--r-chip);
+  padding: 12px 14px;
+}
+.chipLabel {
+  font-family: var(--mono);
+  font-size: .6rem;
+  letter-spacing: .18em;
+  text-transform: uppercase;
+  color: var(--soft);
+}
+.chipValue { font-size: 1.02rem; font-weight: 600; letter-spacing: -.01em; }
+.chipSub { font-size: .74rem; color: var(--soft); }
+
+/* --- Weather: the content plane, deliberately not glass ---------------- */
+
+.weather {
+  padding: 14px 6px 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid var(--glass-rim-low);
+}
+.wxHead { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.temp {
+  font-family: var(--mono);
+  font-size: 1.6rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.03em;
+}
+.feels { font-family: var(--mono); font-size: .78rem; color: var(--soft); }
+.badge { font-size: 1rem; }
+.condition { font-size: .92rem; color: var(--muted); }
+.ambient { font-family: var(--mono); font-size: .74rem; color: var(--soft); }
+
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px 10px; }
+.stat { min-width: 0; }
+.statLabel {
+  font-family: var(--mono);
+  font-size: .58rem;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--soft);
+}
+.statValue {
+  font-family: var(--mono);
+  font-size: .88rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.statSub { font-family: var(--mono); font-size: .58rem; color: var(--soft); }
+
+/* --- Location recovery ------------------------------------------------- */
+
+.locate { --glass-rim: rgba(255, 215, 154, .7); }
+.locateNote { margin: 0 0 14px; font-size: .92rem; color: var(--muted); }
+.locateForm { display: flex; gap: 8px; }
+
+/* Concentric: card radius 26 − 20px padding leaves 6, but a control needs more
+   presence than that, so it steps to the control radius rather than hugging. */
+.zipInput {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: 1.05rem;
+  letter-spacing: .1em;
+  color: var(--ink);
+  background: rgba(10, 16, 30, .28);
+  border: 1px solid var(--glass-rim-low);
+  border-radius: var(--r-control);
+  padding: 12px 14px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.zipInput::placeholder { color: var(--soft); }
+
+.zipSubmit {
+  font-family: var(--sys);
+  font-size: .92rem;
+  font-weight: 600;
+  color: #1b1405;
+  background: var(--accent);
+  border: 0;
+  border-radius: var(--r-control);
+  padding: 12px 18px;
+  cursor: pointer;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .5), 0 6px 16px rgba(8, 14, 28, .24);
+}
+
+.linkBtn {
+  margin-top: 12px;
+  font-family: var(--sys);
+  font-size: .82rem;
+  color: var(--muted);
+  background: none;
+  border: 0;
+  padding: 4px 0;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.zipInput:focus-visible, .zipSubmit:focus-visible, .linkBtn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.buildMeta {
+  position: fixed;
+  right: max(8px, env(safe-area-inset-right));
+  bottom: max(4px, env(safe-area-inset-bottom));
+  font-family: var(--mono);
+  font-size: .55rem;
+  color: rgba(255, 255, 255, .26);
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* --- Phases ------------------------------------------------------------ */
+
+body.phase-dawn {
+  --skyTop: #2b3f6b; --skyBottom: #9db2cd; --accent: #ffd0a0;
+  --lum1: rgba(255, 198, 148, .85); --lum2: rgba(255, 232, 214, .6); --lum3: rgba(150, 176, 224, .7);
+}
+body.phase-day {
+  --skyTop: #3f6da8; --skyBottom: #9cc0e4; --accent: #ffe6b0;
+  --lum1: rgba(255, 255, 255, .78); --lum2: rgba(180, 222, 255, .72); --lum3: rgba(126, 176, 232, .6);
+}
+body.phase-dusk {
+  --skyTop: #3b4b7c; --skyBottom: #9b81ab; --accent: #ffc79e;
+  --lum1: rgba(255, 176, 138, .7); --lum2: rgba(214, 160, 255, .55); --lum3: rgba(96, 112, 170, .7);
+}
+body.phase-night {
+  --skyTop: #0f1930; --skyBottom: #2b4162; --accent: #ffd79a;
+  --lum1: rgba(96, 140, 214, .55); --lum2: rgba(140, 170, 255, .32); --lum3: rgba(30, 52, 96, .8);
+}
+
+/* Light grounds need dark ink, and glass over them needs a lighter tint to read. */
+/* Light grounds get the measured Regular curve: heavy range compression plus a
+   substantial white overlay, rather than the light wash this had before. */
+body.phase-day, body.phase-dawn {
+  --ink: #10192a;
+  --muted: rgba(16, 25, 42, .78);
+  --soft: rgba(16, 25, 42, .56);
+  --glass-contrast: .6;
+  --glass-tint: rgba(255, 255, 255, .6);
+  --glass-rim: rgba(255, 255, 255, .85);
+  --glass-rim-low: rgba(16, 25, 42, .1);
+  --glass-shadow: 0 12px 32px rgba(28, 44, 74, .18);
+}
+body.phase-day .zipInput, body.phase-dawn .zipInput { background: rgba(255, 255, 255, .45); }
+body.phase-day .clock, body.phase-dawn .clock { text-shadow: none; }
+body.phase-day .buildMeta, body.phase-dawn .buildMeta { color: rgba(16, 25, 42, .3); }
+
+/* --- Wider screens ----------------------------------------------------- */
+
+@media (min-width: 700px) {
+  .app { max-width: 880px; margin: 0 auto; }
+  .decisions { flex-direction: row; }
+  .decision { flex: 1 1 0; }
+  .chips { flex-direction: column; flex: 0 0 220px; }
+  .chip { flex: 0 0 auto; }
+}
+
+@media (orientation: landscape) and (max-height: 520px) {
+  .verdict { font-size: clamp(1.4rem, 4.4vh, 1.9rem); }
+  .card { padding: 14px 16px; }
+  .decisions { flex-direction: row; }
+  .chips { flex-direction: column; flex: 0 0 200px; }
+}
+
+/* --- Accessibility ------------------------------------------------------
+   Apple requires the material to stand down for these. Translucency is the
+   first thing to go; the layout and hierarchy stay identical. */
+
+@media (prefers-reduced-transparency: reduce) {
+  .glass {
+    background: var(--skyTop);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border: 1px solid var(--glass-rim-low);
   }
-  .nowCard{order:2; height:100%}
-  .actionsGrid{
-    order:1;
-    grid-template-columns:1fr;
-    grid-auto-rows:minmax(0,1fr);
-    min-height:0;
-  }
-  .app{
-    padding-left:max(28px, calc(env(safe-area-inset-left) + 18px));
-    padding-right:max(14px, calc(env(safe-area-inset-right) + 4px));
-  }
-}
-@media (max-height:430px){
-  .temp{font-size:56px}
-  .timeNow{font-size:26px}
-  .actionValue{font-size:23px}
-  .jacketPrimary{font-size:26px}
-  .nowCard,.action{padding:14px}
-}
-@media (prefers-reduced-motion: reduce){
-  .walk-rain-alert{animation:none}
+  .glass::before { display: none; }
+  .zipInput { backdrop-filter: none; -webkit-backdrop-filter: none; background: rgba(10, 16, 30, .5); }
+  .sky { display: none; }
+  body.phase-day .glass, body.phase-dawn .glass { background: #eaf1fa; }
 }
 
-
-/* v33 portrait rebalance for iPhone 11 */
-
-/* Make layout consume full height cleanly */
-.layout{
-  grid-template-rows: min-content 1fr;
+@media (prefers-contrast: more) {
+  :root { --glass-tint: rgba(10, 16, 30, .58); --glass-rim: rgba(255, 255, 255, .9); }
+  .support, .chipSub, .statSub, .aside { color: var(--ink); }
+  .glass { border: 1px solid var(--glass-rim); }
+  body.phase-day, body.phase-dawn { --glass-tint: rgba(255, 255, 255, .82); }
 }
 
-/* Distribute action cards evenly */
-.actionsGrid{
-  height:100%;
-  grid-template-rows: 1fr 1fr;
-  align-content:stretch;
-}
-
-.actionsGrid .card{
-  height:100%;
-}
-
-/* Slightly increase action typography to fill space better */
-.actionValue{
-  font-size:28px;
-}
-
-.jacketPrimary{
-  font-size:32px;
-}
-
-/* Reduce empty breathing room inside Now card */
-.nowCard{
-  padding:14px 16px 12px;
-}
-
-/* Make stats tighter but wider */
-.stats{
-  gap:6px 8px;
-}
-
-/* Portrait specific tightening */
-@media (orientation:portrait){
-  .layout{
-    height:100%;
-  }
-
-  .actionsGrid{
-    grid-template-columns:1fr 1fr;
-    grid-auto-rows:1fr;
-  }
-
-  .temp{
-    font-size:58px;
-  }
-
-  .condition{
-    font-size:16px;
-  }
-}
-
-
-
-/* v34 safari theme sync */
-html, body{
-  background-color:#0b0d18;
-}
-
-
-/* v35 Apple Weather widget-like surfaces */
-.card{
-  background:
-    linear-gradient(180deg, rgba(255,255,255,.16), rgba(255,255,255,.05)),
-    radial-gradient(180px 100px at 15% 0%, rgba(255,255,255,.18), transparent 72%),
-    rgba(255,255,255,.04);
-  border:1px solid rgba(255,255,255,.12);
-}
-
-.nowCard{
-  background:
-    linear-gradient(180deg, rgba(255,255,255,.18), rgba(255,255,255,.06)),
-    radial-gradient(220px 120px at 15% 0%, rgba(255,255,255,.20), transparent 72%),
-    rgba(255,255,255,.05);
-}
-
-/* v38 minimal version tag */
-.buildMeta{
-  position:fixed;
-  bottom:6px;
-  right:8px;
-  font-size:8px;
-  letter-spacing:.05em;
-  opacity:.55;
-  pointer-events:none;
-  font-weight:600;
-}
-
-
-/* v41 wear prominence + added detail styling */
-
-.wearCard{
-  box-shadow:
-    0 24px 48px rgba(0,0,0,.28),
-    0 0 0 1px rgba(255,255,255,.16) inset;
-  background:
-    linear-gradient(180deg, rgba(255,255,255,.22), rgba(255,255,255,.08)),
-    radial-gradient(220px 120px at 15% 0%, rgba(255,255,255,.22), transparent 70%),
-    rgba(255,255,255,.06);
-}
-
-.jacketPrimary{
-  font-size:34px;
-  letter-spacing:-0.03em;
-}
-
-.wearDetails{
-  margin-top:8px;
-  font-size:12px;
-  color:var(--muted);
-  line-height:1.35;
-}
-
-.wearDetails strong{
-  color:var(--fg);
-  font-weight:700;
-}
-
-
-
-/* v44 dynamic action card sizing */
-.actionsGrid{
-  align-content:start;
-}
-
-.actionsGrid .card{
-  min-height:0;
-}
-
-.action{
-  height:auto;
-}
-
-/* Portrait: auto rows so card height grows with content instead of clipping */
-@media (orientation: portrait){
-  .layout{
-    grid-template-rows:auto 1fr;
-  }
-
-  .actionsGrid{
-    grid-template-columns:1fr 1fr;
-    grid-auto-rows:auto;
-    align-items:stretch;
-  }
-
-  .actionsGrid .card{
-    height:auto;
-    min-height:132px;
-  }
-
-  .wearCard{
-    min-height:160px;
-  }
-
-  .wearDetails{
-    margin-top:8px;
-    font-size:11px;
-    line-height:1.28;
-  }
-}
-
-/* Landscape: keep equal-height stack */
-@media (orientation: landscape){
-  .actionsGrid{
-    grid-auto-rows:minmax(0, 1fr);
-    align-content:stretch;
-  }
-
-  .actionsGrid .card{
-    height:100%;
-  }
-}
-
-/* Prevent overflow clipping on long wear copy */
-#jacketValue,
-#wearValue,
-#wearSub,
-#wearDetailLine,
-#bringValue,
-#bringSub,
-#walkPrimary,
-#walkSecondary,
-#walkTertiary{
-  white-space:normal;
-  overflow:visible;
-  text-overflow:clip;
-}
-
-
-/* v45 Liquid Glass title refinement */
-
-.cardLabel{
-  font-size:10px;
-  letter-spacing:.18em;
-  text-transform:uppercase;
-  font-weight:800;
-  background:linear-gradient(180deg, rgba(255,255,255,.95), rgba(255,255,255,.55));
-  -webkit-background-clip:text;
-  -webkit-text-fill-color:transparent;
-  opacity:.9;
-}
-
-
-
-
-
-/* v46 Apple-native liquid titles with emoji separation */
-
-.actionValue,
-.jacketPrimary,
-.nowCard .temp{
-  display:flex;
-  align-items:baseline;
-  gap:6px;
-}
-
-.emoji{
-  font-size:1em;
-  line-height:1;
-  -webkit-text-fill-color:initial;
-  background:none;
-}
-
-.liquidText{
-  background:linear-gradient(180deg, rgba(255,255,255,.98), rgba(255,255,255,.65));
-  -webkit-background-clip:text;
-  -webkit-text-fill-color:transparent;
-  text-shadow:
-    0 1px 0 rgba(255,255,255,.25),
-    0 10px 28px rgba(0,0,0,.30);
-}
-
-.cardLabel{
-  background:linear-gradient(180deg, rgba(255,255,255,.95), rgba(255,255,255,.55));
-  -webkit-background-clip:text;
-  -webkit-text-fill-color:transparent;
-}
-
-
-
-/* v48 — larger hero time, quieter temperature */
-#timeNow{
-  font-size:56px;
-  font-weight:700;
-  letter-spacing:-0.03em;
-  line-height:1;
-  margin-bottom:4px;
-  background:linear-gradient(180deg, rgba(255,255,255,.98), rgba(255,255,255,.65));
-  -webkit-background-clip:text;
-  -webkit-text-fill-color:transparent;
-  text-shadow:
-    0 1px 0 rgba(255,255,255,.25),
-    0 14px 32px rgba(0,0,0,.35);
-}
-
-#tempNow{
-  font-size:22px;
-  font-weight:700;
-  letter-spacing:-0.01em;
-  line-height:1.05;
-  margin-right:2px;
-}
-
-#tempNow .liquidText{
-  background:linear-gradient(180deg, rgba(255,255,255,.92), rgba(255,255,255,.60));
-  -webkit-background-clip:text;
-  -webkit-text-fill-color:transparent;
-  text-shadow:
-    0 1px 0 rgba(255,255,255,.18),
-    0 8px 20px rgba(0,0,0,.22);
-}
-
-.tempRow{
-  align-items:baseline;
-}
-
-@media (orientation: landscape){
-  #timeNow{ font-size:64px; }
-  #tempNow{ font-size:24px; }
-}
-
-
-/* v50 — softer Apple-like AM/PM */
-/* v52 — Apple-accurate AM/PM */
-.ampm{
-  font-size:18px;
-  font-weight:500;
-  letter-spacing:-0.01em;
-  opacity:0.55;
-  margin-left:2px;
-  position:relative;
-  top:0;
-  vertical-align:baseline;
-  -webkit-text-fill-color:rgba(255,255,255,0.65);
-  background:none;
-  text-shadow:none;
-}
-
-@media (orientation: landscape){
-  .ampm{
-    font-size:20px;
-    opacity:0.5;
-  }
-}
-
-
-/* v50 time refinement */
-#timeNow .liquidText{
-  background:linear-gradient(180deg, rgba(255,255,255,.96), rgba(255,255,255,.62));
-  -webkit-background-clip:text;
-  -webkit-text-fill-color:transparent;
-  text-shadow:
-    0 1px 0 rgba(255,255,255,.18),
-    0 10px 24px rgba(0,0,0,.28);
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
 }

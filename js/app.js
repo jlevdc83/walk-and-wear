@@ -1,10 +1,12 @@
-const VERSION = "v54";
+const VERSION = "v57";
 const REFRESH_MS = 20 * 60 * 1000;
+const RETRY_MS = 60 * 1000;      // after a transient failure — not the full refresh interval
 const RUN_HOT = true;
 
 const $ = (id) => document.getElementById(id);
 let lastRefreshTime = null;
 let refreshTimer = null;
+let retryTimer = null;
 let minuteTimer = null;
 let clockTimer = null;
 
@@ -25,12 +27,17 @@ function renderVersionTag(){
   const el = $("buildMeta");
   if (el) el.textContent = VERSION;
 }
-function scheduleTickers(){
+
+// Tickers run from boot, independent of the forecast. Previously these only started
+// after a successful load, so a location failure left the clock frozen at "--:--" —
+// which is what made a recoverable error look like a hung app.
+function startTickers(){
   clearInterval(minuteTimer);
   clearInterval(clockTimer);
   minuteTimer = setInterval(updateMinutesSince, 60000);
   clockTimer = setInterval(updateClock, 30000);
 }
+
 function sameHourIndex(timeArr, now){
   const nowMs = now.getTime();
   let idx = 0;
@@ -70,6 +77,10 @@ function conditionText(code){
   if (code >= 95 && code <= 99) return "Storm";
   return "Cloudy";
 }
+
+// Only the browser-chrome colour. The page background itself comes from the phase
+// class in CSS — the old version also wrote body.style.backgroundColor, which now
+// would override the stylesheet's gradient.
 function updateThemeColor(phase, weatherCode){
   const weatherState =
     (weatherCode === 0) ? "clear" :
@@ -83,38 +94,17 @@ function updateThemeColor(phase, weatherCode){
     "phase-dusk": { clear: "#5c3f61", cloud: "#564660", fog: "#655a72", rain: "#4c4b67" },
     "phase-night": { clear: "#0c1730", cloud: "#121b2d", fog: "#1a2436", rain: "#10243e" }
   };
-
   const color = (colors[phase] && colors[phase][weatherState]) || "#0b0d18";
 
-  // Keep page background aligned with Safari chrome
-  document.documentElement.style.backgroundColor = color;
-  document.body.style.backgroundColor = color;
-
-  // Update existing theme-color meta tags
-  const metas = Array.from(document.querySelectorAll('meta[name="theme-color"]'));
-  if (metas.length === 0) {
-    const meta = document.createElement("meta");
-    meta.name = "theme-color";
-    meta.content = color;
-    document.head.appendChild(meta);
-  } else {
-    metas.forEach(meta => meta.setAttribute("content", color));
-  }
-
-  // iOS Safari can be stubborn about dynamic theme-color.
-  // Recreate a fresh tag as the last theme-color meta so the latest value wins.
-  const fresh = document.createElement("meta");
-  fresh.name = "theme-color";
-  fresh.content = color;
-  document.head.appendChild(fresh);
-
-  const stale = document.querySelectorAll('meta[name="theme-color"]');
-  if (stale.length > 2) {
-    stale.forEach((meta, idx) => {
-      if (idx < stale.length - 2) meta.remove();
-    });
-  }
+  // iOS can be stubborn about a mutated theme-color, so replace the tag outright
+  // rather than appending a new one on every refresh.
+  document.querySelectorAll('meta[name="theme-color"]').forEach((m) => m.remove());
+  const meta = document.createElement("meta");
+  meta.name = "theme-color";
+  meta.content = color;
+  document.head.appendChild(meta);
 }
+
 function applyScene(now, sunriseIso, sunsetIso, weatherCode){
   const body = document.body;
   body.classList.remove("phase-dawn","phase-day","phase-dusk","phase-night");
@@ -136,6 +126,8 @@ function applyScene(now, sunriseIso, sunsetIso, weatherCode){
   updateThemeColor(phase, weatherCode);
 }
 
+/* --- Location --------------------------------------------------------- */
+
 function geocodeZipQuery(zip){
   return `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(zip)}&count=1&countryCode=US&format=json&t=${Date.now()}`;
 }
@@ -148,50 +140,62 @@ async function geocodeZip(zip){
   if (!hit) throw new Error("ZIP_NOT_FOUND");
   return { lat: hit.latitude, lon: hit.longitude, zip: clean };
 }
-async function reverseGeocode(lat, lon){
-  try {
-    const url = `https://geocoding-api.open-meteo.com/v1/reverse?latitude=${lat}&longitude=${lon}&count=1&language=en&format=json&t=${Date.now()}`;
-    const r = await fetch(url, { cache: "no-store" });
-    const j = await r.json();
-    const hit = j?.results?.[0];
-    if (!hit) return "";
-    return `${hit.name}${hit.admin1 ? ", " + hit.admin1 : ""}`;
-  } catch {
-    return "";
-  }
-}
-async function fallbackToZip(){
-  let zip = localStorage.getItem("dashboard_zip") || "";
-  if (!zip) {
-    zip = window.prompt("Location unavailable. Enter your local ZIP code:");
-    if (!zip) throw new Error("LOCATION_REQUIRED");
-    localStorage.setItem("dashboard_zip", zip.trim());
-  }
-  try {
-    return await geocodeZip(zip);
-  } catch {
-    localStorage.removeItem("dashboard_zip");
-    const retry = window.prompt("ZIP not recognized. Re-enter your local ZIP code:");
-    if (!retry) throw new Error("LOCATION_REQUIRED");
-    localStorage.setItem("dashboard_zip", retry.trim());
-    return await geocodeZip(retry);
-  }
-}
+// Open-Meteo's geocoding API has no reverse endpoint — /v1/reverse returns
+// {"error":true,"reason":"Not Found"}. The old call was wrapped in a try/catch that
+// swallowed the 404 and returned "", so every GPS-located load showed "Location —".
+//
+// Labelling the source honestly costs nothing and cannot break. If a real city name is
+// wanted, BigDataCloud's reverse-geocode-client is free, keyless and CORS-enabled —
+// that would be the place to add it.
+const DEVICE_LOCATION_LABEL = "Device location";
 function isLikelyLocalFile(){
   return window.location.protocol === "file:";
 }
-async function getLocation(){
-  if (isLikelyLocalFile() || !window.isSecureContext || !navigator.geolocation) {
-    return fallbackToZip();
-  }
+function geolocate(){
   return new Promise((resolve, reject) => {
     navigator.geolocation.getCurrentPosition(
-      (pos) => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude, zip: localStorage.getItem("dashboard_zip") || "" }),
-      () => fallbackToZip().then(resolve).catch(reject),
+      (pos) => resolve({ lat: pos.coords.latitude, lon: pos.coords.longitude, zip: "" }),
+      reject,
       { enableHighAccuracy: false, timeout: 8000, maximumAge: 600000 }
     );
   });
 }
+
+// Resolution order: device location, then a saved ZIP, then ask. Asking is now a
+// card in the page — window.prompt() is suppressed in an iOS standalone PWA, which
+// left the app with no reachable way to supply a location at all.
+async function resolveLocation(){
+  if (!isLikelyLocalFile() && window.isSecureContext && navigator.geolocation) {
+    try { return await geolocate(); } catch { /* fall through to ZIP */ }
+  }
+  const saved = localStorage.getItem("dashboard_zip") || "";
+  if (saved) {
+    try {
+      return await geocodeZip(saved);
+    } catch {
+      localStorage.removeItem("dashboard_zip"); // stale or wrong — stop trusting it
+    }
+  }
+  throw new Error("NEEDS_LOCATION");
+}
+
+function showLocate(message){
+  $("locateCard").classList.remove("hidden");
+  $("decisions").classList.add("hidden");
+  // Also hide the weather strip: a row of em-dashes reads as broken rather than empty.
+  $("weather").classList.add("hidden");
+  if (message) $("locateNote").textContent = message;
+  $("updatedLine").textContent = "Location needed";
+  $("zipMeta").textContent = "No location";
+}
+function hideLocate(){
+  $("locateCard").classList.add("hidden");
+  $("decisions").classList.remove("hidden");
+  $("weather").classList.remove("hidden");
+}
+
+/* --- Forecast --------------------------------------------------------- */
+
 async function fetchForecast(lat, lon){
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const url =
@@ -222,6 +226,9 @@ function setStats(items){
     </div>
   `).join("");
 }
+
+/* --- Decision logic (unchanged) --------------------------------------- */
+
 function wearEmojiForJacket(label){
   const t = String(label || "").toLowerCase();
   if (t.includes("rain jacket")) return "☔";
@@ -232,14 +239,12 @@ function wearEmojiForJacket(label){
   if (t.includes("no jacket")) return "👕";
   return "🧥";
 }
-
 function bringEmojiForItems(items){
   const joined = (items || []).join(" ").toLowerCase();
   if (joined.includes("umbrella")) return "☔";
   if (joined.includes("windbreaker")) return "🌬️";
   return "";
 }
-
 function clothingPlan(tempF, feelsLikeF, windMph, rainingNow){
   const t = feelsLikeF + (RUN_HOT ? 4 : 0);
   let clothes = "";
@@ -279,7 +284,7 @@ function sharedDepartureWindow(hourly, idx, now){
   }
   return { currentRain: current, firstRainMins, peak90 };
 }
-function bringPlan(tempF, feelsLikeF, windMph, horizon){
+function bringPlan(feelsLikeF, windMph, horizon){
   const items = [];
   const umbrella = horizon.currentRain >= 35 || (horizon.firstRainMins !== null && horizon.firstRainMins <= 90) || horizon.peak90 >= 60;
   if (umbrella) items.push("Umbrella");
@@ -317,16 +322,7 @@ function estimatePawRisk(tempF, isDay, cloud, uv){
   if (surface >= 85) return { label: "Warm pavement", level: "medium" };
   return { label: "Paws okay", level: "low" };
 }
-function dryWindowCountdown(horizon){
-  if (horizon.firstRainMins !== null) {
-    const mins = horizon.firstRainMins;
-    if (mins <= 5) return "Dry window ending now";
-    if (mins < 60) return `Dry for ~${mins}m`;
-    return `Dry for ~${Math.round(mins/60)}h`;
-  }
-  return "Dry for the next couple hours";
-}
-function walkDecision(feelsLikeF, precipProb, pawRisk, rainingNow, windMph, horizon){
+function walkDecision(feelsLikeF, pawRisk, rainingNow, windMph, horizon){
   const t = feelsLikeF + (RUN_HOT ? 4 : 0);
 
   // Only block for real current issues or clearly unsafe conditions
@@ -336,13 +332,13 @@ function walkDecision(feelsLikeF, precipProb, pawRisk, rainingNow, windMph, hori
   if (t >= 95) return { label: "🔥 Wait now", cls: "walk-paw" };
   if (t <= 20) return { label: "⏳ Wait now", cls: "walk-cold" };
 
-  // Future rain should advise, not block, unless it's very imminent
+  // Future rain should advise, not block — go now, ahead of it.
   if (horizon.firstRainMins !== null && horizon.firstRainMins <= 20 && horizon.peak90 >= 70) {
     return { label: "🚶 Go now", cls: "walk-warm" };
   }
   if (t >= 82) return { label: "🚶 Go soon", cls: "walk-warm" };
   if (t >= 55) return { label: "🐾 Walk now", cls: "walk-ideal" };
-  if (t >= 40) return { label: "🐕 Okay now", cls: "walk-cold" };
+  // Anything left is between 20° and 55°: fine, just cold.
   return { label: "🐕 Okay now", cls: "walk-cold" };
 }
 function nextSunEvent(daily, now){
@@ -358,58 +354,58 @@ function nextSunEvent(daily, now){
 }
 function pawWipeNeeded(hourly, idx, horizon){
   const rainNowAmount = hourly.precipitation?.[idx] ?? 0;
-  const rainNowProb = hourly.precipitation_probability?.[idx] ?? 0;
   const imminentRain = horizon.firstRainMins !== null && horizon.firstRainMins <= 30 && horizon.peak90 >= 60;
-
-  return rainNowAmount > 0 || (rainNowProb >= 60 && rainNowAmount > 0) || imminentRain;
+  return rainNowAmount > 0 || imminentRain;
 }
 function walkAssessment(hourly, idx, now, nextSun, tempF, isDay, cloud, uv, horizon){
   const pawRisk = estimatePawRisk(tempF, isDay, cloud, uv);
   const rainingNow = (hourly.precipitation?.[idx] ?? 0) > 0;
   const windNow = hourly.windspeed_10m?.[idx] ?? 0;
-  const decision = walkDecision(
-    hourly.apparent_temperature[idx],
-    hourly.precipitation_probability[idx] ?? 0,
-    pawRisk,
-    rainingNow,
-    windNow,
-    horizon
-  );
+  const decision = walkDecision(hourly.apparent_temperature[idx], pawRisk, rainingNow, windNow, horizon);
 
+  // A "Wait" verdict must never be paired with "Good right now" — the original default
+  // said exactly that under a hot-pavement warning, which reads as a contradiction now
+  // that the verdict is the headline.
   let secondary = "Good right now";
-  if (horizon.firstRainMins !== null) {
+  if (decision.label.includes("Wait")) {
+    secondary =
+      rainingNow ? "Raining right now" :
+      pawRisk.level === "high" ? "Pavement too hot" :
+      windNow >= 30 ? "Too windy out" :
+      "Better in a while";
+  } else if (horizon.firstRainMins !== null) {
     const mins = horizon.firstRainMins;
     if (mins <= 5) secondary = "Rain starting now";
     else if (mins < 60) secondary = `Rain in ~${mins}m`;
     else secondary = `Rain later • ~${Math.round(mins/60)}h`;
   } else if (nextSun && decision.label.includes("Walk now")) {
     const minutesToSun = Math.round((nextSun.time - now) / 60000);
-    if (minutesToSun > 0 && minutesToSun <= 75) {
-      secondary = "Great light soon";
-    }
+    if (minutesToSun > 0 && minutesToSun <= 75) secondary = "Great light soon";
   } else if (decision.label.includes("Go soon")) {
     secondary = "Better before it gets warmer";
   }
 
-  let tertiary = pawRisk.label;
-  if (pawWipeNeeded(hourly, idx, horizon)) {
-    tertiary += " • Wipe paws after";
-  }
+  // When the verdict is already "wait, pavement's too hot", repeating "Hot pavement risk"
+  // underneath says nothing new.
+  let tertiary = (decision.label.includes("Wait") && pawRisk.level === "high") ? "" : pawRisk.label;
+  if (pawWipeNeeded(hourly, idx, horizon)) tertiary = tertiary ? `${tertiary} • Wipe paws after` : "Wipe paws after";
 
   let cls = decision.cls;
-  if (secondary === "Great light soon" && decision.label.includes("Walk now")) {
-    cls = "walk-golden";
-  }
+  if (secondary === "Great light soon" && decision.label.includes("Walk now")) cls = "walk-golden";
 
   return { primary: decision.label, secondary, tertiary, cls };
 }
 
+/* --- Render ----------------------------------------------------------- */
+
 async function refresh(){
+  clearTimeout(retryTimer);
   try {
     const now = new Date();
-    const loc = await getLocation();
-    const cityName = !loc.zip ? await reverseGeocode(loc.lat, loc.lon) : "";
-    setZipMeta(loc.zip || cityName || localStorage.getItem("dashboard_zip") || "");
+    const loc = await resolveLocation();
+    hideLocate();
+
+    setZipMeta(loc.zip || DEVICE_LOCATION_LABEL);
     const forecast = await fetchForecast(loc.lat, loc.lon);
 
     const h = forecast.hourly;
@@ -430,13 +426,11 @@ async function refresh(){
     const lo = d.temperature_2m_min?.[0];
     const nextSun = nextSunEvent(d, now);
     const horizon = sharedDepartureWindow(h, idx, now);
-    const rainNear = horizon.peak90;
 
     applyScene(now, d.sunrise?.[0], d.sunset?.[0], weatherCode);
     updateClock();
-    renderVersionTag();
 
-    $("tempNow").innerHTML = `<span class="liquidText">${round(temp)}°</span>`;
+    $("tempNow").textContent = `${round(temp)}°`;
     $("feelsNow").textContent = `feels ${round(feels)}°`;
     $("modeBadge").textContent = weatherEmoji(weatherCode, isDay);
     $("conditionLine").textContent = conditionText(weatherCode);
@@ -444,38 +438,31 @@ async function refresh(){
 
     setStats([
       { k: "UV", v: isDay ? `${round(uvNow)}` : "—", b: isDay ? `max ${round(uv4h)}` : "Night" },
-      { k: "Next sun", v: nextSun ? `${nextSun.label} ${fmtShortTime(nextSun.time)}` : "—", b: `Hi ${round(hi)}° / Lo ${round(lo)}°` },
+      // Label carries the event so the value is just a time — "Sunset 8:24 PM" was
+      // too wide for a quarter column and truncated to "Sunset 8:…".
+      { k: nextSun ? nextSun.label : "Next sun", v: nextSun ? fmtShortTime(nextSun.time) : "—", b: `Hi ${round(hi)}° / Lo ${round(lo)}°` },
       { k: "Rain", v: `${round(rain4h)}%`, b: "next 4h" },
       { k: "Wind", v: `${round(wind)} mph`, b: "current" }
     ]);
 
     const wear = clothingPlan(temp, feels, wind, rainingNow);
-
     const wearEmoji = wearEmojiForJacket(wear.jacket);
-    $("jacketValue").innerHTML = wearEmoji ? `<span class="emoji">${wearEmoji}</span><span class="liquidText">${wear.jacket}</span>` : `<span class="liquidText">${wear.jacket}</span>`;
+    $("jacketValue").textContent = wearEmoji ? `${wearEmoji} ${wear.jacket}` : wear.jacket;
     $("wearValue").textContent = wear.clothes;
+    $("wearSub").textContent = wear.sub || "";
 
     let extraDetail = "";
     if (rainingNow) extraDetail = "Raining now — stay waterproof.";
     else if (wind >= 18) extraDetail = "Wind noticeable — outer layer helps.";
     else if (feels >= 75) extraDetail = "Warm out — breathable fabrics.";
     else if (feels <= 40) extraDetail = "Cold — insulate well.";
+    $("wearDetailLine").textContent = extraDetail;
 
-    $("wearSub").textContent = wear.sub || "";
-    if (!$("wearDetailLine")){
-      const detail = document.createElement("div");
-      detail.className = "wearDetails";
-      detail.id = "wearDetailLine";
-      $("wearCard").appendChild(detail);
-    }
-    $("wearDetailLine").innerHTML = extraDetail ? `<strong>Tip:</strong> ${extraDetail}` : "";
-
-
-    const bring = bringPlan(temp, feels, wind, horizon);
+    const bring = bringPlan(feels, wind, horizon);
     $("bringCard").classList.toggle("hidden", bring.length === 0);
     if (bring.length) {
       const bringEmoji = bringEmojiForItems(bring);
-      $("bringValue").innerHTML = bringEmoji ? `<span class="emoji">${bringEmoji}</span><span class="liquidText">${bring.join(" + ")}</span>` : `<span class="liquidText">${bring.join(" + ")}</span>`;
+      $("bringValue").textContent = bringEmoji ? `${bringEmoji} ${bring.join(" + ")}` : bring.join(" + ");
       if (bring.includes("Umbrella")) {
         const rainInfo = rainTimingSummary(horizon);
         $("bringSub").textContent = `${rainInfo.line1} • ${rainInfo.line2}`;
@@ -493,7 +480,7 @@ async function refresh(){
 
     const walk = walkAssessment(h, idx, now, nextSun, temp, isDay, cloud, uvNow, horizon);
     const walkCard = $("walkCard");
-    walkCard.className = "card action walkCard";
+    walkCard.className = "card glass decision walk";
     if (walk.cls) walkCard.classList.add(walk.cls);
     $("walkPrimary").textContent = walk.primary;
     $("walkSecondary").textContent = walk.secondary;
@@ -501,27 +488,52 @@ async function refresh(){
 
     lastRefreshTime = Date.now();
     updateMinutesSince();
-    scheduleTickers();
   } catch (e) {
     console.error(e);
-    $("updatedLine").textContent = "Location needed";
-    $("conditionLine").textContent = "Enable location or enter ZIP";
-    $("ambientLine").textContent = "Weather can’t load without a location";
-    setZipMeta(localStorage.getItem("dashboard_zip") || "");
+    if (e && e.message === "NEEDS_LOCATION") {
+      // Waiting on the user — retrying on a timer would burn battery and change nothing.
+      showLocate("Allow location, or enter a ZIP code to continue.");
+    } else {
+      // Transient: network, or the forecast endpoint. Come back in a minute, not twenty.
+      $("updatedLine").textContent = "Couldn't load — retrying";
+      retryTimer = setTimeout(refresh, RETRY_MS);
+    }
   }
 }
 
-refresh();
-clearInterval(refreshTimer);
-refreshTimer = setInterval(refresh, REFRESH_MS);
+/* --- Boot ------------------------------------------------------------- */
+
+$("locateForm").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const zip = $("zipInput").value.trim();
+  if (!/^\d{5}$/.test(zip)) {
+    $("locateNote").textContent = "Enter a five-digit ZIP code.";
+    return;
+  }
+  $("locateNote").textContent = "Looking that up…";
+  try {
+    await geocodeZip(zip);            // validate before storing, so a typo can't stick
+    localStorage.setItem("dashboard_zip", zip);
+    hideLocate();
+    refresh();
+  } catch {
+    $("locateNote").textContent = `No match for ${zip}. Check the ZIP and try again.`;
+  }
+});
+
+$("retryLocation").addEventListener("click", () => {
+  $("locateNote").textContent = "Asking for location…";
+  refresh();
+});
 
 window.clearSavedZip = function(){
   localStorage.removeItem("dashboard_zip");
   location.reload();
 };
 
-
-updateThemeColor("phase-night", 0);
-
-
 renderVersionTag();
+updateClock();
+startTickers();
+refresh();
+clearInterval(refreshTimer);
+refreshTimer = setInterval(refresh, REFRESH_MS);
