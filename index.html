@@ -29,7 +29,13 @@
   <div class="app">
 
     <header class="bar">
-      <div class="clock" id="timeNow">--:--</div>
+      <div class="clockGroup">
+        <div class="clock" id="timeNow">--:--</div>
+        <!-- Hidden unless the Screen Wake Lock API is available. Off by default: keeping
+             a screen lit is a decision with a battery cost, not something to assume. -->
+        <button class="awakeBtn hidden" id="awakeBtn" type="button"
+                aria-pressed="false" aria-label="Keep screen awake">Keep awake</button>
+      </div>
       <div class="barMeta">
         <!-- Tappable: the only way to change location once one is set. A settings
              screen would be a whole surface for one field. -->
@@ -114,7 +120,7 @@
 
   </div>
 
-  <div class="buildMeta" id="buildMeta">v59</div>
+  <div class="buildMeta" id="buildMeta">v60</div>
 
   <script src="js/app.js"></script>
 </body>

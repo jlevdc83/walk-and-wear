@@ -1,4 +1,4 @@
-const VERSION = "v59";
+const VERSION = "v60";
 const REFRESH_MS = 20 * 60 * 1000;
 const RETRY_MS = 60 * 1000;      // after a transient failure — not the full refresh interval
 const RUN_HOT = true;
@@ -751,6 +751,93 @@ $("cancelLocate").addEventListener("click", () => {
 
 $("zipMeta").addEventListener("click", openLocate);
 
+/* --- Always-on, and dimming when it is -------------------------------------
+   Two halves of one feature. Keeping the screen lit only makes sense if the app
+   stops being a bright rectangle at 2am, and dimming only matters if the screen
+   is staying on in the first place. Neither is much use alone.
+
+   The lesson from measuring Apple's glass applies here too: as luminance drops,
+   fine strokes are lost first. So the dim state gets *heavier* type, not thinner —
+   the opposite of the usual instinct. */
+
+const DIM_AFTER_MS = 60 * 1000;   // idle time before dimming, night + always-on only
+
+let wakeLock = null;
+let dimTimer = null;
+let keepAwake = localStorage.getItem("dashboard_keepAwake") === "true";
+
+function wakeLockSupported(){
+  return "wakeLock" in navigator && typeof navigator.wakeLock?.request === "function";
+}
+
+async function acquireWakeLock(){
+  if (!keepAwake || !wakeLockSupported() || document.visibilityState !== "visible") return;
+  try {
+    wakeLock = await navigator.wakeLock.request("screen");
+    // The system drops the lock on backgrounding, minimise, or a call — so it has to be
+    // taken again on every return to visible, not just once.
+    wakeLock.addEventListener("release", () => { wakeLock = null; });
+  } catch {
+    // Denied — low battery, or a document the browser doesn't consider user-visible.
+    // The preference is kept: it is what the user asked for, and a transient refusal
+    // should not silently disable the feature forever. The next visibility change
+    // tries again. Dimming keys off the preference, not the lock, so that still works.
+    wakeLock = null;
+  }
+}
+
+async function releaseWakeLock(){
+  try { await wakeLock?.release(); } catch { /* already gone */ }
+  wakeLock = null;
+}
+
+function syncAwakeButton(){
+  const btn = $("awakeBtn");
+  if (!btn) return;
+  btn.classList.toggle("hidden", !wakeLockSupported());
+  btn.setAttribute("aria-pressed", String(keepAwake));
+  btn.textContent = keepAwake ? "Awake" : "Keep awake";
+  document.body.classList.toggle("awake", keepAwake);
+  if (!keepAwake) undim();
+}
+
+function isNightPhase(){
+  return document.body.classList.contains("phase-night");
+}
+
+function dim(){
+  if (!keepAwake || !isNightPhase()) return;
+  document.body.classList.add("dimmed");
+}
+
+function undim(){
+  document.body.classList.remove("dimmed");
+  clearTimeout(dimTimer);
+  if (keepAwake) dimTimer = setTimeout(dim, DIM_AFTER_MS);
+}
+
+$("awakeBtn").addEventListener("click", async () => {
+  keepAwake = !keepAwake;
+  localStorage.setItem("dashboard_keepAwake", String(keepAwake));
+  syncAwakeButton();
+  if (keepAwake) { await acquireWakeLock(); undim(); }
+  else { await releaseWakeLock(); }
+});
+
+// Any touch restores full brightness and restarts the idle countdown.
+["pointerdown", "keydown"].forEach((evt) =>
+  window.addEventListener(evt, undim, { passive: true })
+);
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible") {
+    acquireWakeLock();
+    undim();
+    updateClock();
+    updateMinutesSince();
+  }
+});
+
 window.clearSavedZip = function(){
   localStorage.removeItem("dashboard_zip");
   localStorage.removeItem("dashboard_place");
@@ -767,6 +854,8 @@ if ("serviceWorker" in navigator) {
 renderVersionTag();
 updateClock();
 startTickers();
+syncAwakeButton();
+if (keepAwake) { acquireWakeLock(); undim(); }
 // Cache first, network second: something readable is on screen before the request
 // leaves. If the cache is empty or stale this is a no-op and refresh() fills it in.
 bootFromCache();
