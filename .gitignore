@@ -1,0 +1,5 @@
+.DS_Store
+
+# Session transcript: contains home network detail (Pi tailnet address, LAN
+# subnet, MAC addresses, HOOBS layout). Keep it local — do not publish.
+session-export/
