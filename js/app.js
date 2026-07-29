@@ -1,4 +1,4 @@
-const VERSION = "v79";
+const VERSION = "v80";
 const RETRY_MS = 60 * 1000;      // after a transient failure — not the full refresh interval
 
 // Everything tunable now lives in js/config.js and is edited on admin.html.
@@ -724,31 +724,7 @@ function render(forecast, loc, now){
    Each writes only if its element exists and it is switched on. Anything with no
    data says so plainly rather than showing an em dash, which reads as broken. */
 
-/* --- Indicators -----------------------------------------------------------
-   A glyph and a semantic tone per widget, so state reads before the text does.
-   Drawn inline rather than pulled from a font: SF Symbols is not licensed for the
-   web, and an icon font would be a download for nine shapes. They inherit
-   currentColor, so tone drives them without a second set. */
-
-const ICONS = {
-  lock:    '<path d="M6 10V7a4 4 0 0 1 8 0v3M4.5 10h11v8.5h-11z"/>',
-  unlock:  '<path d="M6 10V7a4 4 0 0 1 7.7-1.5M4.5 10h11v8.5h-11z"/>',
-  air:     '<path d="M3 8h9a2.6 2.6 0 1 0-2.6-2.6M3 12h12a2.6 2.6 0 1 1-2.6 2.6M3 16h6"/>',
-  droplet: '<path d="M10 3.5c3 3.6 5 6.1 5 8.4a5 5 0 0 1-10 0c0-2.3 2-4.8 5-8.4z"/>',
-  sunrise: '<path d="M10 3v4M4.6 9.2 7 10M15.4 9.2 13 10M2.5 16h15M6 16a4 4 0 0 1 8 0"/>',
-  sunset:  '<path d="M10 9V5M4.6 7.2 7 8M15.4 7.2 13 8M2.5 16h15M6 16a4 4 0 0 1 8 0"/>',
-  calendar:'<path d="M3.5 5.5h13V17h-13zM3.5 9h13M7 3.5v3M13 3.5v3"/>',
-  battery: '<path d="M2.5 7h12v6h-12zM16.5 9.5v1"/>',
-  leaf:    '<path d="M4 16C4 9 9 5 17 4c0 8-4 12-11 12zM4 16c2-3 5-5 8-6"/>',
-  gauge:   '<path d="M4 15a6.5 6.5 0 1 1 12 0M10 15l3.5-4"/>',
-};
-
-function icon(name, tone){
-  const d = ICONS[name];
-  if (!d) return "";
-  return `<svg viewBox="0 0 20 20" class="ico ${tone || ""}" fill="none" stroke="currentColor"
-    stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
-}
+/* Icons live in js/config.js — shared with the admin page. */
 
 function setIcon(id, name, tone){
   const el = $(`${id}Icon`);
@@ -953,6 +929,7 @@ function renderBatteryBody(mode, devices, isLow){
 
   if (mode === "bars") {
     return devices.map((b) => `<span class="battBar ${tone(b)}${pin(b)}">
+      <span class="devIcon">${icon(deviceIcon(b), tone(b))}</span>
       <span class="battName">${b.name}</span>
       <span class="battTrack"><span class="battFill" style="width:${pct(b) ?? 0}%"></span></span>
       <span class="battPct">${pct(b) == null ? "?" : pct(b) + "%"}</span>
@@ -961,6 +938,7 @@ function renderBatteryBody(mode, devices, isLow){
 
   if (mode === "list") {
     return devices.map((b) => `<span class="battLine ${tone(b)}${pin(b)}">
+      <span class="devIcon">${icon(deviceIcon(b), tone(b))}</span>
       <span class="battName">${b.name}</span>
       <span class="battPct">${pct(b) == null ? "?" : pct(b) + "%"}</span>
     </span>`).join("");

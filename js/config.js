@@ -193,3 +193,56 @@ let layout = loadLayout();
 function saveLayout(){
   try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout)); } catch { /* private mode */ }
 }
+
+
+/* --- Icons ----------------------------------------------------------------
+   Shared by the app and the admin page. Drawn inline rather than pulled from a
+   font: SF Symbols is not licensed for the web, and an icon font would be a
+   download for a dozen shapes. They inherit currentColor, so a tone class colours
+   them without needing a second set. */
+
+const ICONS = {
+  lock:    '<path d="M6 10V7a4 4 0 0 1 8 0v3M4.5 10h11v8.5h-11z"/>',
+  unlock:  '<path d="M6 10V7a4 4 0 0 1 7.7-1.5M4.5 10h11v8.5h-11z"/>',
+  air:     '<path d="M3 8h9a2.6 2.6 0 1 0-2.6-2.6M3 12h12a2.6 2.6 0 1 1-2.6 2.6M3 16h6"/>',
+  droplet: '<path d="M10 3.5c3 3.6 5 6.1 5 8.4a5 5 0 0 1-10 0c0-2.3 2-4.8 5-8.4z"/>',
+  sunrise: '<path d="M10 3v4M4.6 9.2 7 10M15.4 9.2 13 10M2.5 16h15M6 16a4 4 0 0 1 8 0"/>',
+  sunset:  '<path d="M10 9V5M4.6 7.2 7 8M15.4 7.2 13 8M2.5 16h15M6 16a4 4 0 0 1 8 0"/>',
+  calendar:'<path d="M3.5 5.5h13V17h-13zM3.5 9h13M7 3.5v3M13 3.5v3"/>',
+  battery: '<path d="M2.5 7h12v6h-12zM16.5 9.5v1"/>',
+  leaf:    '<path d="M4 16C4 9 9 5 17 4c0 8-4 12-11 12zM4 16c2-3 5-5 8-6"/>',
+  gauge:   '<path d="M4 15a6.5 6.5 0 1 1 12 0M10 15l3.5-4"/>',
+
+  // Device types, for the battery list.
+  camera:  '<path d="M2.5 6.5h9l1.5 2h4.5v8h-15zM7 12.5a2.5 2.5 0 1 0 5 0 2.5 2.5 0 0 0-5 0z"/>',
+  door:    '<path d="M5 3.5h10v14H5zM12 10.5v1"/>',
+  window:  '<path d="M3.5 3.5h13v13h-13zM10 3.5v13M3.5 10h13"/>',
+  motion:  '<path d="M10 4.5a1.2 1.2 0 1 0 0-.1zM10 7v5M7.5 9h5M8 17l2-4 2 4"/>',
+  smoke:   '<path d="M10 2.5c1.5 2.5.5 3.5 0 4.5-1 2 .5 3.5 2 2.5M6 17a4 4 0 0 1 8 0z"/>',
+  gate:    '<path d="M2.5 6.5h15v11h-15zM6 6.5v11M10 6.5v11M14 6.5v11M2.5 11h15"/>',
+  sensor:  '<circle cx="10" cy="10" r="2.2"/><path d="M5.5 5.5a6.4 6.4 0 0 0 0 9M14.5 5.5a6.4 6.4 0 0 1 0 9"/>',
+};
+
+function icon(name, tone){
+  const d = ICONS[name];
+  if (!d) return "";
+  return `<svg viewBox="0 0 20 20" class="ico ${tone || ""}" fill="none" stroke="currentColor"
+    stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+}
+
+/// A glyph for a battery-bearing accessory. HAP only reports "sensor" for most of
+/// them, so the name is used to tell a smoke alarm from a window contact — which is
+/// the difference between "replace it this month" and "replace it today".
+function deviceIcon(dev){
+  const type = (dev.type || "").toLowerCase();
+  const name = (dev.name || "").toLowerCase();
+  if (type === "lock") return "lock";
+  if (type === "camera") return "camera";
+  if (/smoke|carbon|co\b|alarm/.test(name)) return "smoke";
+  if (/motion/.test(name)) return "motion";
+  if (/glass/.test(name)) return "window";
+  if (/window/.test(name)) return "window";
+  if (/gate|gar(a|)ge/.test(name)) return "gate";
+  if (/door|patio|entry/.test(name)) return "door";
+  return "sensor";
+}

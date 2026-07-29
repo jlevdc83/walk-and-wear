@@ -1270,3 +1270,29 @@ body.bedside .pill { display: none; }
    right-click, and cannot be orphaned by an edit elsewhere — which is exactly how
    it broke, when removing the old inline panel took its listener with it. */
 a.widgetsBtn { text-decoration: none; display: inline-flex; align-items: center; }
+
+/* --- Device glyphs in battery lists --------------------------------------- */
+
+.devIcon { display: inline-flex; flex: none; }
+.devIcon .ico { width: 16px; height: 16px; }
+
+/* Admin picker: checkbox, glyph, name, then the level. */
+.battPickRow .widgetPick {
+  grid-template-columns: auto auto 1fr;
+  align-items: center;
+}
+.battPickRow .widgetName { grid-column: 3; }
+.battPickRow .widgetNote { grid-column: 3; }
+.battPickRow .devIcon { grid-row: span 2; align-self: center; }
+
+/* Widget list and bars: glyph sits before the name. */
+.battLine { gap: 8px; }
+.battLine .devIcon { order: -1; }
+.battBar { grid-template-columns: auto 1fr auto; }
+.battBar .devIcon { grid-column: 1; grid-row: 1 / span 2; align-self: center; }
+.battBar .battName { grid-column: 2; }
+.battBar .battTrack { grid-column: 2; }
+.battBar .battPct { grid-column: 3; }
+/* The pinned-device select was clipped to "Front Door", hiding whether it meant the
+   lock or the door sensor — the exact ambiguity this setting exists to resolve. */
+.row select { width: auto; min-width: 9rem; max-width: 60%; }

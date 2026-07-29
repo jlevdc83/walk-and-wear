@@ -257,9 +257,11 @@ function renderBatteries(){
     const lvl = dev.level == null ? null : Math.round(dev.level);
     const low = dev.flag || (lvl != null && lvl <= S.battThreshold);
     const meta = [dev.type, lvl == null ? null : `${lvl}%`].filter(Boolean).join(" · ");
-    return `<li class="widgetRow${on ? "" : " off"}${low ? " lowBatt" : ""}">
+    const tone = low ? "bad" : (lvl != null && lvl <= 50 ? "mid" : "ok");
+    return `<li class="widgetRow battPickRow${on ? "" : " off"}${low ? " lowBatt" : ""}">
       <label class="widgetPick">
         <input type="checkbox" ${on ? "checked" : ""} data-batt="${devKey(dev).replace(/"/g, "&quot;")}">
+        <span class="devIcon">${icon(deviceIcon(dev), tone)}</span>
         <span class="widgetName">${dev.name}</span>
         <span class="widgetNote">${meta || "no level reported"}${low ? " — low" : ""}</span>
       </label>
