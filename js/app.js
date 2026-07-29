@@ -1,4 +1,4 @@
-const VERSION = "v68";
+const VERSION = "v69";
 const RETRY_MS = 60 * 1000;      // after a transient failure — not the full refresh interval
 
 // Everything tunable now lives in js/config.js and is edited on admin.html.
@@ -979,8 +979,6 @@ if (bedsideParam === "flip") document.body.classList.add("flip");
 
    The clock is not a widget. It is the one thing a bedside display must always
    show, and making it optional would only create a way to break it. */
-
-let layout = loadLayout();
 
 function currentContext(){
   return document.body.classList.contains("bedside") ? "bedside" : "portrait";
