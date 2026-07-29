@@ -1,4 +1,4 @@
-const VERSION = "v81";
+const VERSION = "v82";
 const RETRY_MS = 60 * 1000;      // after a transient failure — not the full refresh interval
 
 // Everything tunable now lives in js/config.js and is edited on admin.html.
@@ -747,6 +747,11 @@ function setMini(id, value, sub){
   if (s) s.textContent = sub || "";
 }
 
+function setViz(id, html){
+  const el = $(`${id}Viz`);
+  if (el) el.innerHTML = html || "";
+}
+
 function renderMinis({ h, d, idx, now, nextSun }){
   // Outdoor humidity, with the dew point — above about 65°F it is oppressive in a
   // way a percentage never conveys.
@@ -755,6 +760,8 @@ function renderMinis({ h, d, idx, now, nextSun }){
   setIcon("hum", "droplet");
   setMini("hum", rh == null ? "—" : `${round(rh)}%`,
     dew == null ? "outdoor" : `dew point ${round(dew)}°${S.units === "C" ? "C" : "F"}`);
+  // 30–60% is the comfortable band; the dial marks it so a number becomes a verdict.
+  setViz("hum", vizGauge(rh, null, rh == null ? "" : rh > 70 || rh < 25 ? "mid" : "ok"));
 
   // Sun: whichever comes next, counting down.
   if (nextSun) {
@@ -763,11 +770,17 @@ function renderMinis({ h, d, idx, now, nextSun }){
     setIcon("sun", nextSun.label === "Sunrise" ? "sunrise" : "sunset");
     setMini("sun", fmtShortTime(nextSun.time), `${nextSun.label.toLowerCase()} ${when}`);
   } else setMini("sun", "—", "");
+  // Where the sun actually is between today's rise and set. A countdown says how
+  // long; the arc says how much daylight is left, which is the thing you act on.
+  if (d.sunrise?.[0] && d.sunset?.[0]) {
+    setViz("sun", vizSunArc(new Date(d.sunrise[0]), new Date(d.sunset[0]), now));
+  }
 
   // Tomorrow, for deciding tonight.
   const thi = d.temperature_2m_max?.[1], tlo = d.temperature_2m_min?.[1];
   setIcon("tom", "calendar");
   setMini("tom", thi == null ? "—" : `${round(thi)}° / ${round(tlo)}°`, "high / low");
+  setViz("tom", vizRange(tlo, thi, d.temperature_2m_min?.[0], d.temperature_2m_max?.[0]));
 
   // Pollen: report the worst of the four rather than four numbers nobody reads.
   if (airData) {
@@ -775,12 +788,16 @@ function renderMinis({ h, d, idx, now, nextSun }){
                    ["grass", airData.grass_pollen], ["ragweed", airData.ragweed_pollen]];
     const worst = kinds.filter(([, v]) => v != null).sort((a, b) => b[1] - a[1])[0];
     if (worst) {
-      setMini("pollen", pollenBand(worst[1]), `${worst[0]} ${Math.round(worst[1])} grains/m³`);
+      const band = pollenBand(worst[1]);
+      setMini("pollen", band, `${worst[0]} ${Math.round(worst[1])} grains/m³`);
+      const bi = POLLEN_STEPS.indexOf(band);
+      setViz("pollen", vizSteps(POLLEN_STEPS, bi, bi >= 3 ? "bad" : bi >= 2 ? "mid" : "ok"));
     } else {
       // Open-Meteo's pollen comes from the CAMS *European* dataset, so every count is
       // null in North America — verified: Berlin returns values, DC returns nulls.
       // Saying so beats a permanently blank widget that looks broken.
       setMini("pollen", "no data", "Europe only — no free US source");
+      setViz("pollen", vizSteps(POLLEN_STEPS, -1, ""));
     }
 
     setIcon("pollen", "leaf");
@@ -788,6 +805,9 @@ function renderMinis({ h, d, idx, now, nextSun }){
     setIcon("aq", "gauge", toneFor("aqi", aqi));
     setMini("aq", aqi == null ? "—" : `AQI ${Math.round(aqi)}`,
       pm == null ? "" : `PM2.5 ${pm.toFixed(1)} µg/m³`);
+    // AQI is defined by its bands, so draw the bands and put a pin on them. The
+    // number alone requires knowing that 50 is the good/moderate line.
+    setViz("aq", vizMeter(aqi, AQI_BANDS));
   } else {
     setMini("pollen", "—", "unavailable");
     setMini("aq", "—", "unavailable");
@@ -798,7 +818,7 @@ function renderMinis({ h, d, idx, now, nextSun }){
 /// rather than sitting empty and looking broken.
 function renderHomeMinis(home){
   if (!home || !home.ok) {
-    ["lock", "inAir", "inHum", "batt"].forEach((id) => setMini(id, "—", "needs the Pi build"));
+    ["lock", "inAir", "inHum", "batt"].forEach((id) => { setMini(id, "—", "needs the Pi build"); setViz(id, ""); });
     return;
   }
   const lock = (home.locks || [])[0];
@@ -832,6 +852,10 @@ function renderHomeMinis(home){
       pill.innerHTML = `${icon("battery")}<span>${lvl == null ? "?" : lvl + "%"}</span>`;
     }
   }
+  // A shackle at 17px is decoration. At 56 it is the widget — you read the door's
+  // state from the doorway, and the word underneath only confirms it.
+  setViz("lock", vizGlyph(lockGlyph, lockTone));
+
   const lockCard = document.querySelector('[data-widget="lock"]');
   if (lockCard) lockCard.classList.toggle("warn", lockTone === "bad");
 
@@ -847,12 +871,20 @@ function renderHomeMinis(home){
   setIcon("inAir", "air", toneFor("airQuality", air && air.quality));
   setMini("inAir", air ? air.quality : "—",
     air ? (air.pm25 != null ? `${air.name} · PM2.5 ${air.pm25}` : air.name) : "no sensor");
+  // HOOBS reports a word, not a number, so a scale is the honest shape — it shows
+  // how far from "excellent" the room is without inventing precision.
+  const ai = air ? AIR_STEPS.indexOf(air.quality) : -1;
+  setViz("inAir", vizSteps(AIR_STEPS, ai, ai >= 3 ? "ok" : ai >= 2 ? "mid" : ai >= 0 ? "bad" : ""));
 
   const hum = pick(hums, S.humiditySensor);
   const target = S.humidityTarget;
   setIcon("inHum", "droplet", hum ? (hum.value < target ? "mid" : "ok") : "");
   setMini("inHum", hum ? `${Math.round(hum.value)}%` : "—",
     hum ? `${hum.value < target ? "below" : "at or above"} the ${target}% target` : "no sensor");
+  // The target as a tick on the dial: the gap is the whole point of this widget,
+  // and a sentence saying "below" makes you hold two numbers in your head.
+  setViz("inHum", vizGauge(hum ? hum.value : null, target,
+    !hum ? "" : hum.value < target ? "mid" : "ok"));
 
   // Full records, not just names — the admin page cannot show a level it never saw.
   const all = home.batteries || [];

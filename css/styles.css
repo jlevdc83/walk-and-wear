@@ -606,6 +606,18 @@ body.bedside.flip { --mask-shift: -2.87%; }
 body.bedside { background: #000; overflow: hidden; }
 body.bedside .sky { display: none; }
 
+/* Plain `?bedside` — the common case, and until now the broken one. Only the
+   `.masked` variant below established a size container, so on the unmasked view
+   every cqh in the bedside rules resolved to 0: tile text, padding, gaps and radii
+   all collapsed to nothing. A definite height here gives cqh something to measure.
+   `.masked` is more specific, so it still overrides this with the aperture's box. */
+body.bedside .app {
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+  container-type: size;
+}
+
 body.bedside.masked .app {
   position: fixed;
   top: 50%;
@@ -819,8 +831,14 @@ body.admin { overflow-y: auto; }
 .miniSub { font-size: .7rem; color: var(--soft); }
 body.bedside .minis { grid-template-columns: repeat(4, 1fr); gap: 6px; }
 body.bedside .mini { padding: 1.4cqh 1.6cqw; border-radius: 8px; }
-body.bedside .miniLabel { font-size: 3.1cqh; letter-spacing: .1em; }
-body.bedside .miniValue { font-size: 5.2cqh; }
+/* Sized against the shorter axis of the two. These were written in cqh alone back
+   when cqh resolved to 0, so they were never really laid out; in a narrow column a
+   height-derived size overflows the width and clips the label. */
+body.bedside .miniLabel {
+  font-size: min(3.1cqh, 7cqw); letter-spacing: .06em;
+  overflow-wrap: anywhere;   /* wrap "Indoor humidity"; never truncate it to "IN…" */
+}
+body.bedside .miniValue { font-size: min(5.2cqh, 13cqw); }
 body.bedside .miniSub { display: none; }
 
 /* --- Battery rows -------------------------------------------------------- */
@@ -1366,3 +1384,105 @@ a.widgetsBtn { text-decoration: none; display: inline-flex; align-items: center;
 .wArc.walk-paw { fill: var(--sysOrange); }
 .wArc.walk-rain-alert { fill: #5E5CE6; }
 .wDialNote { font-size: var(--fs-floor); color: var(--muted); }
+
+/* --- Small-widget visuals --------------------------------------------------
+   Every small tile was label / value / subtitle in a square, which made eight of
+   them interchangeable at a glance and left the lower half empty. Each now ends in
+   a graphic shaped like its data — a banded meter for AQI, a stepped scale for the
+   two air readings, dials for humidity, an arc for the sun, a range bar for
+   tomorrow, and a shackle at a size you can read from the doorway. */
+
+.miniViz {
+  display: block;
+  margin-top: auto;                 /* claim the dead space rather than pad it */
+  padding-top: 8px;
+}
+.viz { display: block; --tone: var(--soft); }
+.viz.ok  { --tone: var(--sysGreen); }
+.viz.mid { --tone: var(--sysOrange); }
+.viz.bad { --tone: var(--sysRed); }
+
+/* Banded meter — the scale is the information, the pin is the reading. */
+.vizMeter { position: relative; height: 12px; }
+.vizTrack {
+  display: block; height: 6px; border-radius: 3px; margin-top: 3px;
+  opacity: .85;
+}
+.vizPin {
+  position: absolute; top: 0; width: 3px; height: 12px; margin-left: -1.5px;
+  border-radius: 2px; background: var(--ink);
+  box-shadow: 0 0 0 1.5px var(--glass-tint);
+  transition: left .5s ease;
+}
+
+/* Stepped scale — for ordered words, where a number would be false precision. */
+.vizSteps { display: flex; align-items: center; gap: 3px; flex-wrap: wrap; }
+.vizStep {
+  flex: 1 1 0; min-width: 6px; height: 6px; border-radius: 3px;
+  background: currentColor; opacity: .16;
+}
+.vizStep.on { background: var(--tone); opacity: 1; }
+.vizStepLabel {
+  flex: 0 0 100%; margin-top: 4px;
+  font-family: var(--mono); font-size: var(--fs-floor);
+  letter-spacing: .08em; text-transform: uppercase; color: var(--soft);
+}
+
+/* Dial — a percentage you judge against a band or a target. */
+.vizGauge { width: 100%; max-width: 96px; height: auto; margin: 0 auto; overflow: visible; }
+.vizGauge .gTrack { fill: none; stroke: currentColor; opacity: .16; stroke-width: 6; stroke-linecap: round; }
+.vizGauge .gFill  { fill: none; stroke: var(--tone); stroke-width: 6; stroke-linecap: round;
+                    transition: stroke-dasharray .6s ease; }
+.vizGauge .gTarget { stroke: var(--ink); stroke-width: 2; opacity: .75; stroke-linecap: round; }
+
+/* Sun arc — how much daylight is left, not just when it ends. */
+.vizSun { width: 100%; max-width: 104px; height: auto; margin: 0 auto; overflow: visible; }
+.vizSun .sArc { fill: none; stroke: currentColor; opacity: .22; stroke-width: 2;
+                stroke-linecap: round; stroke-dasharray: 2 5; }
+.vizSun .sHorizon { stroke: currentColor; opacity: .3; stroke-width: 1; }
+.vizSun .sDot.up   { fill: #FFCC00; filter: drop-shadow(0 0 5px rgba(255, 204, 0, .65)); }
+.vizSun .sDot.down { fill: currentColor; opacity: .35; }
+
+/* Range bar — tomorrow against today, so the comparison is not mental arithmetic. */
+.vizRange { display: block; }
+.vizRange .rTrack {
+  position: relative; display: block; height: 8px;
+  border-radius: 4px; background: currentColor; background-clip: padding-box;
+}
+.vizRange .rTrack { background: color-mix(in srgb, currentColor 12%, transparent); }
+.vizRange .rRef {
+  position: absolute; top: 2px; height: 4px; border-radius: 2px;
+  background: currentColor; opacity: .28;
+}
+.vizRange .rFill {
+  position: absolute; top: 0; height: 8px; border-radius: 4px;
+  background: linear-gradient(90deg, var(--sysBlue, #0A84FF), var(--sysOrange));
+  transition: left .6s ease, right .6s ease;
+}
+.vizRange .rEnds {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 4px;
+  margin-top: 4px; font-size: var(--fs-floor); color: var(--soft);
+}
+.vizRange .rRefTag { font-family: var(--mono); letter-spacing: .04em; opacity: .8; }
+
+/* One glyph, large — for a widget whose entire content is a binary state. */
+.vizGlyph { display: flex; justify-content: center; color: var(--tone); }
+.vizGlyph svg { width: 52px; height: 52px; }
+.vizGlyph.bad svg { animation: vizPulse 2.4s ease-in-out infinite; }
+@keyframes vizPulse { 0%, 100% { opacity: 1; } 50% { opacity: .55; } }
+
+/* The bedside slot is read from across the room: keep the graphic, drop the
+   captions that only work in the hand. */
+body.bedside .miniViz { padding-top: 4px; }
+body.bedside .vizStepLabel, body.bedside .vizRange .rEnds { display: none; }
+body.bedside .vizGlyph svg { width: 9cqh; height: 9cqh; }
+body.bedside .vizGauge, body.bedside .vizSun { max-width: 26cqh; }
+
+@media (prefers-reduced-motion: reduce) {
+  .vizGlyph.bad svg { animation: none; }
+  .vizPin, .vizGauge .gFill, .vizRange .rFill { transition: none; }
+}
+/* Daylight already spent, so the arc reads as progress and not only position. */
+.vizSun .sDone { fill: none; stroke: #FFCC00; stroke-width: 2.5; stroke-linecap: round;
+                 opacity: .75; transition: stroke-dasharray .6s ease; }
+@media (prefers-reduced-motion: reduce) { .vizSun .sDone { transition: none; } }

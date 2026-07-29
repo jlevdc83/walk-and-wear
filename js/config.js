@@ -378,3 +378,92 @@ function renderWalkOutlook(mode, outlook){
       return renderWalkOutlook("icons", outlook);
   }
 }
+
+
+/* --- Small-widget visuals -------------------------------------------------
+   The four that read well — wear, walk, weather, batteries — all carry a graphic
+   matched to their data. The rest were label, value, subtitle in a square: the
+   same shape nine times, with the bottom half empty. These give each one a form
+   that suits what it actually measures, and fills the space with meaning rather
+   than padding. */
+
+/// A banded meter with a marker — for a value on a known scale, like AQI.
+function vizMeter(value, bands){
+  const max = bands[bands.length - 1].to;
+  const pos = value == null ? null : Math.max(0, Math.min(1, value / max)) * 100;
+  const stops = bands.map((b) => `${b.color} ${(b.from / max) * 100}% ${(b.to / max) * 100}%`).join(", ");
+  return `<span class="viz vizMeter">
+    <span class="vizTrack" style="background:linear-gradient(90deg, ${stops})"></span>
+    ${pos == null ? "" : `<span class="vizPin" style="left:${pos.toFixed(1)}%"></span>`}
+  </span>`;
+}
+
+/// A stepped scale — for ordered categories where the number means little.
+function vizSteps(labels, activeIndex, tone){
+  return `<span class="viz vizSteps ${tone || ""}">${labels.map((l, i) =>
+    `<span class="vizStep${i <= activeIndex && activeIndex >= 0 ? " on" : ""}" title="${l}"></span>`
+  ).join("")}<span class="vizStepLabel">${activeIndex >= 0 ? labels[activeIndex] : "no reading"}</span></span>`;
+}
+
+/// A dial — for a percentage that has a target worth seeing the distance to.
+function vizGauge(value, target, tone){
+  const R = 30, C = Math.PI * R;                       // half circumference
+  const f = value == null ? 0 : Math.max(0, Math.min(1, value / 100));
+  const t = target == null ? null : Math.max(0, Math.min(1, target / 100));
+  const ang = (x) => Math.PI * (1 - x);
+  const pt = (x, r) => `${(36 + Math.cos(ang(x)) * r).toFixed(1)},${(34 - Math.sin(ang(x)) * r).toFixed(1)}`;
+  return `<svg class="viz vizGauge ${tone || ""}" viewBox="0 0 72 40" aria-hidden="true">
+    <path class="gTrack" d="M6,34 A${R},${R} 0 0 1 66,34"/>
+    <path class="gFill" d="M6,34 A${R},${R} 0 0 1 66,34" stroke-dasharray="${(C*f).toFixed(1)} ${C.toFixed(1)}"/>
+    ${t == null ? "" : `<line class="gTarget" x1="${pt(t,23).split(",")[0]}" y1="${pt(t,23).split(",")[1]}" x2="${pt(t,37).split(",")[0]}" y2="${pt(t,37).split(",")[1]}"/>`}
+  </svg>`;
+}
+
+/// The sun's place between sunrise and sunset, with the horizon drawn.
+function vizSunArc(sunrise, sunset, now){
+  const span = sunset - sunrise;
+  const f = span > 0 ? Math.max(0, Math.min(1, (now - sunrise) / span)) : 0;
+  const up = now >= sunrise && now <= sunset;
+  const x = 6 + f * 60, y = 34 - Math.sin(Math.PI * f) * 26;
+  const arc = Math.PI * 30;   // the semicircle's length, for the progress dash
+  return `<svg class="viz vizSun" viewBox="0 0 72 42" aria-hidden="true">
+    <path class="sArc" d="M6,34 A30,30 0 0 1 66,34"/>
+    <path class="sDone" d="M6,34 A30,30 0 0 1 66,34"
+          stroke-dasharray="${(arc * f).toFixed(1)} ${arc.toFixed(1)}"/>
+    <line class="sHorizon" x1="2" y1="34" x2="70" y2="34"/>
+    <circle class="sDot ${up ? "up" : "down"}" cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4"/>
+  </svg>`;
+}
+
+/// A temperature range on a shared scale, with today drawn faintly behind it — the
+/// question the widget answers is "warmer or colder than today", and a bare pair of
+/// numbers makes you do that subtraction yourself.
+function vizRange(lo, hi, refLo, refHi){
+  if (lo == null || hi == null) return "";
+  const all = [lo, hi, refLo, refHi].filter((x) => x != null);
+  const pad = 3;
+  const sLo = Math.min(...all) - pad, sHi = Math.max(...all) + pad;
+  const span = Math.max(1, sHi - sLo);
+  const at = (x) => ((x - sLo) / span) * 100;
+  const ref = refLo == null || refHi == null ? "" :
+    `<span class="rRef" style="left:${at(refLo).toFixed(1)}%;right:${(100 - at(refHi)).toFixed(1)}%"></span>`;
+  return `<span class="viz vizRange">
+    <span class="rTrack">${ref}<span class="rFill" style="left:${at(lo).toFixed(1)}%;right:${(100 - at(hi)).toFixed(1)}%"></span></span>
+    <span class="rEnds"><span>${Math.round(lo)}°</span><span class="rRefTag">${refLo == null ? "" : "today " + Math.round(refLo) + "–" + Math.round(refHi) + "°"}</span><span>${Math.round(hi)}°</span></span>
+  </span>`;
+}
+
+/// One large glyph, for a widget whose whole content is a binary state.
+function vizGlyph(name, tone){
+  return `<span class="viz vizGlyph ${tone || ""}">${icon(name, tone)}</span>`;
+}
+
+const AQI_BANDS = [
+  { from: 0,   to: 50,  color: "#34C759" },
+  { from: 50,  to: 100, color: "#FFCC00" },
+  { from: 100, to: 150, color: "#FF8D28" },
+  { from: 150, to: 200, color: "#FF383C" },
+  { from: 200, to: 300, color: "#AF52DE" },
+];
+const AIR_STEPS = ["poor", "inferior", "fair", "good", "excellent"];
+const POLLEN_STEPS = ["none", "low", "moderate", "high", "very high"];
