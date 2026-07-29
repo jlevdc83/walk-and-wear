@@ -221,12 +221,18 @@ function renderBatteries(){
     : watch.length === 0 ? `Watching none — the widget will stay quiet.`
     : `Watching ${watch.length} of ${roster.length}.`;
 
-  ul.innerHTML = roster.map((name) => {
-    const on = watch === null || watch.includes(name);
-    return `<li class="widgetRow${on ? "" : " off"}">
+  ul.innerHTML = roster.map((d) => {
+    // Tolerate the old name-only roster from a previous version.
+    const dev = typeof d === "string" ? { name: d } : d;
+    const on = watch === null || watch.includes(dev.name);
+    const lvl = dev.level == null ? null : Math.round(dev.level);
+    const low = dev.flag || (lvl != null && lvl <= S.battThreshold);
+    const meta = [dev.type, lvl == null ? null : `${lvl}%`].filter(Boolean).join(" · ");
+    return `<li class="widgetRow${on ? "" : " off"}${low ? " lowBatt" : ""}">
       <label class="widgetPick">
-        <input type="checkbox" ${on ? "checked" : ""} data-batt="${name.replace(/"/g, "&quot;")}">
-        <span class="widgetName">${name}</span>
+        <input type="checkbox" ${on ? "checked" : ""} data-batt="${dev.name.replace(/"/g, "&quot;")}">
+        <span class="widgetName">${dev.name}</span>
+        <span class="widgetNote">${meta || "no level reported"}${low ? " — low" : ""}</span>
       </label>
     </li>`;
   }).join("");
@@ -239,7 +245,8 @@ document.addEventListener("change", (e) => {
   // An empty watch list means "all", so the first unticked box has to be expanded
   // into an explicit list or it would read as "watch nothing".
   let watch = loadBattWatch();
-  if (watch === null) watch = [...roster];   // expand "all" before removing one from it
+  const names = roster.map((d) => (typeof d === "string" ? d : d.name));
+  if (watch === null) watch = [...names];   // expand "all" before removing one from it
   const name = cb.dataset.batt;
   watch = cb.checked ? [...new Set([...watch, name])] : watch.filter((n) => n !== name);
   saveBattWatch(watch);

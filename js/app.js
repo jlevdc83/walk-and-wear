@@ -1,4 +1,4 @@
-const VERSION = "v71";
+const VERSION = "v72";
 const RETRY_MS = 60 * 1000;      // after a transient failure — not the full refresh interval
 
 // Everything tunable now lives in js/config.js and is edited on admin.html.
@@ -792,18 +792,36 @@ function renderHomeMinis(home){
   setMini("inHum", hum ? `${Math.round(hum.value)}%` : "—",
     hum ? `${hum.value < target ? "below" : "at or above"} the ${target}% target` : "no sensor");
 
-  // The roster is cached so the admin page can offer the choice from anywhere.
+  // Full records, not just names — the admin page cannot show a level it never saw.
   const all = home.batteries || [];
-  if (all.length) saveBattRoster(all.map((b) => b.name));
+  if (all.length) saveBattRoster(all);
 
   const watch = loadBattWatch();
   const watched = watch === null ? all : all.filter((b) => watch.includes(b.name));
-  const low = watched.filter((b) => b.flag || (typeof b.level === "number" && b.level <= S.battThreshold));
+  const isLow = (b) => b.flag || (typeof b.level === "number" && b.level <= S.battThreshold);
+  const low = watched.filter(isLow);
 
-  setMini("batt", low.length ? `${low.length} low` : "all good",
-    low.length
-      ? low.slice(0, 2).map((b) => `${b.name} ${b.level ?? "?"}%`).join(" · ")
-      : `${watched.length} watched`);
+  // Levels for everything watched, worst first — a count alone tells you something is
+  // wrong without telling you what, and this widget exists to be glanced at.
+  const rows = [...watched].sort((x, y) =>
+    (x.level ?? 101) - (y.level ?? 101));
+  const shown = rows.slice(0, 4);
+
+  const card = document.querySelector('[data-widget="batteries"]');
+  if (card) card.classList.toggle("warn", low.length > 0);
+
+  setMini("batt",
+    low.length ? `${low.length} low` : (watched.length ? "all good" : "none watched"),
+    rows.length > 4 ? `+${rows.length - 4} more watched` : `${watched.length} watched`);
+
+  const list = $("battRows");
+  if (list) {
+    list.innerHTML = shown.map((b) => {
+      const lvl = b.level == null ? "?" : `${Math.round(b.level)}%`;
+      return `<span class="battRow${isLow(b) ? " low" : ""}">
+        <span class="battName">${b.name}</span><span class="battLvl">${lvl}</span></span>`;
+    }).join("");
+  }
 }
 
 function timingPhrase(timing){

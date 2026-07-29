@@ -4,7 +4,7 @@
 // a network round trip. Forecast calls are never cached here — staleness is handled
 // in app.js, which stores the last good reading and labels its age honestly.
 
-const CACHE = "walk-and-wear-v71";
+const CACHE = "walk-and-wear-v72";
 
 const SHELL = [
   "./",

@@ -822,3 +822,26 @@ body.bedside .mini { padding: 1.4cqh 1.6cqw; border-radius: 8px; }
 body.bedside .miniLabel { font-size: 3.1cqh; letter-spacing: .1em; }
 body.bedside .miniValue { font-size: 5.2cqh; }
 body.bedside .miniSub { display: none; }
+
+/* --- Battery rows -------------------------------------------------------- */
+
+.battRows { display: flex; flex-direction: column; gap: 1px; margin-top: 7px; }
+.battRow {
+  display: flex; justify-content: space-between; gap: 10px;
+  font-family: var(--mono); font-size: .68rem; color: var(--soft);
+}
+.battName { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.battLvl { font-variant-numeric: tabular-nums; flex: none; }
+/* Low reads as a state, not a colour swap — the row keeps its shape and gains weight. */
+.battRow.low { color: #f0a35c; font-weight: 600; }
+.battRow.low .battLvl::after { content: " ⚠"; }
+
+/* The card itself signals, so a glance catches it without reading the rows. */
+.mini.warn { --glass-rim: rgba(240, 163, 92, .8); }
+.mini.warn .miniValue { color: #f0a35c; }
+
+/* Admin: a low device is called out in the picker too, so choosing what to watch
+   and seeing what needs attention are the same view. */
+.widgetRow.lowBatt .widgetNote { color: #f0a35c; }
+
+body.bedside .battRows { display: none; }   /* no room, and nothing to read at a glance */
