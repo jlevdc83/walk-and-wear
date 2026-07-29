@@ -507,6 +507,101 @@ body.dimmed .weather .stats { opacity: .35; }   /* detail recedes; verdicts stay
 body.dimmed .awakeBtn { opacity: .4; }
 body, body * { transition: color .8s ease, opacity .8s ease, background-color .8s ease; }
 
+/* --- Bedside: masked for the enclosure aperture --------------------------
+   Enabled with ?bedside — the Pi build serves it by default.
+
+   The enclosure shows 124 x 58 mm of the iPhone 11's 139.62 x 64.51 mm display,
+   shifted 4 mm toward the keypad so the notch falls under plastic. That is
+   88.81% x 89.91% of the display, offset 2.87% — the numbers come from
+   build_integrated_frame.py, not from measuring a photograph.
+
+   Everything outside is black because it is behind the shell. The dashboard
+   layout does NOT come along: 796 x 372 pt at 2.14:1 cannot hold two cards, a
+   strip, chips and a weather footer and stay readable from a bed. What survives
+   is the time, the walk verdict, and the hourly shape. */
+
+:root {
+  --mask-w: 88.81%;
+  --mask-h: 89.91%;
+  --mask-shift: 2.87%;   /* +4 mm toward the keypad, as a share of display width */
+}
+
+/* Flip if the phone mounts in the other landscape orientation — the CAD fixes the
+   offset relative to the enclosure, not to which way up the phone goes in. */
+body.bedside.flip { --mask-shift: -2.87%; }
+
+body.bedside { background: #000; overflow: hidden; }
+body.bedside .sky { display: none; }
+
+body.bedside .app {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  width: var(--mask-w);
+  height: var(--mask-h);
+  transform: translate(calc(-50% + var(--mask-shift)), -50%);
+  min-height: 0;
+  padding: 3.2% 3.6%;
+  gap: 0;
+  justify-content: flex-start;
+  /* 5 mm of 58 mm — the aperture's own corner radius. */
+  border-radius: 8.6% / 4%;
+  overflow: hidden;
+  /* So cqh/cqw below resolve against the aperture rather than the viewport. */
+  container-type: size;
+}
+
+/* Dropped: everything that cannot earn a quarter of a letterbox. */
+body.bedside .wear,
+body.bedside .chips,
+body.bedside .ambient,
+body.bedside .stats,
+body.bedside .tip,
+body.bedside .awakeBtn,
+body.bedside .buildMeta,
+body.bedside .updated { display: none; }
+
+body.bedside .bar { align-items: baseline; padding: 0; }
+/* Sized off the aperture itself, not the viewport — this is read from a bed at
+   about 1.5 m, so everything is far larger than a phone-in-hand layout wants. */
+body.bedside .clock { font-size: 23cqh; line-height: .88; }
+body.bedside .place { font-size: 4.2cqh; text-decoration: none; }
+
+body.bedside .decisions { flex: 1; justify-content: center; gap: 0; }
+body.bedside .walk {
+  background: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+  border-radius: 0;
+  padding: 0;
+}
+body.bedside .walk::before { display: none; }
+body.bedside .cardLabel { display: none; }
+body.bedside .verdict { font-size: 17cqh; margin: 0; line-height: 1; }
+body.bedside .support { font-size: 8cqh; margin-top: .35em; }
+body.bedside .aside { display: none; }
+body.bedside .outlook { margin-top: 0; padding-top: 3cqh; padding-bottom: 5cqh; gap: 5px; }
+body.bedside .hour { height: 7cqh; border-radius: 3px; }
+body.bedside .hour .tick { bottom: -4.6cqh; font-size: 3.4cqh; }
+
+/* Weather groups with the place name in the top-right rather than sitting in its
+   own band at the bottom, where it stranded itself opposite a void. Absolute so it
+   does not claim a third of the column. */
+body.bedside .weather {
+  position: absolute;
+  top: 13cqh;
+  right: 3.6%;
+  border: 0;
+  padding: 0;
+  gap: 0;
+}
+body.bedside .wxHead { justify-content: flex-end; gap: 2.5cqh; }
+body.bedside .temp { font-size: 9cqh; }
+body.bedside .feels { display: none; }
+body.bedside .badge { font-size: 7cqh; }
+body.bedside .condition { font-size: 5.5cqh; }
+
 /* --- Near-off ------------------------------------------------------------
    As dark as a web page is allowed to get. On OLED true black means the pixels
    are simply off, so this is close to a dark screen; on an LCD the backlight

@@ -1,4 +1,4 @@
-const VERSION = "v62";
+const VERSION = "v63";
 const REFRESH_MS = 20 * 60 * 1000;
 const RETRY_MS = 60 * 1000;      // after a transient failure — not the full refresh interval
 const RUN_HOT = true;
@@ -911,6 +911,15 @@ if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("./sw.js").catch(() => { /* http:// or unsupported */ });
   });
+}
+
+// Bedside mode: masked to the enclosure aperture, reduced layout. A query param so it
+// can be tested from any browser; the Pi build serves it by default. ?bedside=flip
+// swaps the 4mm offset for the other landscape mounting.
+const bedsideParam = new URLSearchParams(location.search).get("bedside");
+if (bedsideParam !== null) {
+  document.body.classList.add("bedside");
+  if (bedsideParam === "flip") document.body.classList.add("flip");
 }
 
 renderVersionTag();
