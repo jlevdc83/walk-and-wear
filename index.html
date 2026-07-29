@@ -73,9 +73,9 @@
       </div>
     </section>
 
-    <main class="decisions" id="decisions">
+    <main class="wgrid" id="decisions">
 
-      <section class="card glass decision wear" id="wearCard" data-widget="wear">
+      <section class="w w-medium glass decision wear" id="wearCard" data-widget="wear">
         <h2 class="cardLabel">Wear</h2>
         <p class="verdict" id="jacketValue">—</p>
         <p class="support" id="wearValue">—</p>
@@ -83,7 +83,7 @@
         <p class="tip" id="wearDetailLine"></p>
       </section>
 
-      <section class="card glass decision walk" id="walkCard" data-widget="walk">
+      <section class="w w-medium glass decision walk" id="walkCard" data-widget="walk">
         <h2 class="cardLabel">Dog walk</h2>
         <p class="verdict" id="walkPrimary">—</p>
         <p class="support" id="walkSecondary">—</p>
@@ -96,75 +96,70 @@
         <p class="hourDetail hidden" id="hourDetail" aria-live="polite"></p>
       </section>
 
-      <div class="chips" id="chips">
-        <section class="chip glass hidden" id="bringCard" data-widget="bring">
+      <section class="w w-small glass chip hidden" id="bringCard" data-widget="bring">
           <span class="chipLabel">Bring</span>
           <span class="chipValue" id="bringValue">—</span>
           <span class="chipSub" id="bringSub">—</span>
         </section>
 
-        <section class="chip glass hidden" id="protectCard" data-widget="protect">
+      <section class="w w-small glass chip hidden" id="protectCard" data-widget="protect">
           <span class="chipLabel">Protect</span>
           <span class="chipValue" id="protectValue">—</span>
           <span class="chipSub" id="protectSub">—</span>
         </section>
-      </div>
 
 
       <!-- Compact widgets. Each is off by default except where noted; the admin page
            decides which appear in which context. -->
-      <div class="minis" id="minis">
-        <section class="mini glass widgetOff" data-widget="pollen">
+      <section class="w w-small glass mini widgetOff" data-widget="pollen">
           <span class="miniLabel">Pollen</span>
           <span class="miniValue" id="pollenValue">—</span>
           <span class="miniSub" id="pollenSub">—</span>
         </section>
-        <section class="mini glass widgetOff" data-widget="airquality">
+      <section class="w w-small glass mini widgetOff" data-widget="airquality">
           <span class="miniLabel">Air quality</span>
           <span class="miniValue" id="aqValue">—</span>
           <span class="miniSub" id="aqSub">—</span>
         </section>
-        <section class="mini glass widgetOff" data-widget="humidity">
+      <section class="w w-small glass mini widgetOff" data-widget="humidity">
           <span class="miniLabel">Humidity</span>
           <span class="miniValue" id="humValue">—</span>
           <span class="miniSub" id="humSub">—</span>
         </section>
-        <section class="mini glass widgetOff" data-widget="sun">
+      <section class="w w-small glass mini widgetOff" data-widget="sun">
           <span class="miniLabel">Sun</span>
           <span class="miniValue" id="sunValue">—</span>
           <span class="miniSub" id="sunSub">—</span>
         </section>
-        <section class="mini glass widgetOff" data-widget="tomorrow">
+      <section class="w w-small glass mini widgetOff" data-widget="tomorrow">
           <span class="miniLabel">Tomorrow</span>
           <span class="miniValue" id="tomValue">—</span>
           <span class="miniSub" id="tomSub">—</span>
         </section>
-        <section class="mini glass widgetOff" data-widget="lock">
+      <section class="w w-small glass mini widgetOff" data-widget="lock">
           <span class="miniLabel">Front door</span>
           <span class="miniValue" id="lockValue">—</span>
           <span class="miniSub" id="lockSub">—</span>
         </section>
-        <section class="mini glass widgetOff" data-widget="indoorair">
+      <section class="w w-small glass mini widgetOff" data-widget="indoorair">
           <span class="miniLabel">Indoor air</span>
           <span class="miniValue" id="inAirValue">—</span>
           <span class="miniSub" id="inAirSub">—</span>
         </section>
-        <section class="mini glass widgetOff" data-widget="indoorhum">
+      <section class="w w-small glass mini widgetOff" data-widget="indoorhum">
           <span class="miniLabel">Indoor humidity</span>
           <span class="miniValue" id="inHumValue">—</span>
           <span class="miniSub" id="inHumSub">—</span>
         </section>
-        <section class="mini glass widgetOff" data-widget="batteries">
+      <section class="w w-medium glass mini widgetOff" data-widget="batteries">
           <span class="miniLabel">Batteries</span>
           <span class="miniValue" id="battValue">—</span>
           <span class="miniSub" id="battSub">—</span>
           <div class="battRows" id="battRows"></div>
         </section>
-      </div>
 
-    </main>
 
-    <footer class="weather" id="weather" data-widget="weather">
+      <footer class="w w-medium glass weather" id="weather" data-widget="weather">
       <div class="wxHead">
         <span class="temp" id="tempNow">—°</span>
         <span class="feels" id="feelsNow">feels —°</span>
@@ -175,9 +170,11 @@
       <div class="stats" id="stats"></div>
     </footer>
 
+    </main>
+
   </div>
 
-  <div class="buildMeta" id="buildMeta">v72</div>
+  <div class="buildMeta" id="buildMeta">v73</div>
 
   <script src="js/config.js"></script>
   <script src="js/app.js"></script>

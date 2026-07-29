@@ -32,8 +32,18 @@ const SETTING_DEFAULTS = {
   humiditySensor: "",
   humidityTarget: 60,     // Josh's stated target; the widget says which side of it you are on
 
+  // Ring. "any" | "away" | "off" — which armed states send the display dark.
+  // Independent of keep-awake and of the hour: if the house is armed, the reason to
+  // go dark has nothing to do with what time it is.
+  dimOnArmed: "any",
+
   // Batteries
-  battThreshold: 20,      // percent at or under which a device counts as low
+  battThreshold: 20,
+  // Always shown first, whatever its level. A healthy lock sorts last under
+  // worst-first, which is exactly backwards for the one battery whose death locks
+  // you out. Keyed name|type, because names are NOT unique — there is a "Front Door"
+  // lock and a "Front Door" contact sensor, and pinning by name matched both.
+  battPrimary: "Front Door|lock",      // percent at or under which a device counts as low
 
   // Bedside aperture, in mm. Defaults match build_integrated_frame.py.
   maskW: 124,
@@ -52,6 +62,17 @@ const DISPLAY_MM = { w: 139.62, h: 64.51 };
 // "watching 1 of 7", because it was storing a sentinel.
 const BATT_WATCH_KEY = "ww_battWatch";
 const BATT_ROSTER_KEY = "ww_battRoster";
+
+/// Identity for a battery device. Name alone collides: the Schlage and the Ring
+/// contact on the same door are both called "Front Door".
+function devKey(d){
+  if (typeof d === "string") return d;                 // legacy name-only entry
+  return `${d.name}|${d.type || ""}`;
+}
+/// Tolerates the old name-only stored values by falling back to a name match.
+function devMatches(d, stored){
+  return stored.includes("|") ? devKey(d) === stored : d.name === stored;
+}
 const SENSOR_ROSTER_KEY = "ww_sensorRoster";
 
 function loadSensorRoster(){

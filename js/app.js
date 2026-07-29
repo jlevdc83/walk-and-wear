@@ -1,4 +1,4 @@
-const VERSION = "v72";
+const VERSION = "v73";
 const RETRY_MS = 60 * 1000;      // after a transient failure — not the full refresh interval
 
 // Everything tunable now lives in js/config.js and is edited on admin.html.
@@ -144,7 +144,12 @@ async function geocodeZip(zip){
   if (!hit) throw new Error("ZIP_NOT_FOUND");
   // The response already carries the place name. Showing "Anchorage, Alaska" instead of
   // "ZIP 99501" also confirms the code resolved where you expected.
-  const name = hit.admin1 ? `${hit.name}, ${hit.admin1}` : (hit.name || "");
+  // admin1 spelled out gives "Washington D.C., District of Columbia", which wrapped
+  // the header. Open-Meteo has no short-code field — admin1_id is a numeric geoname
+  // id, and using it printed "Washington D.C., 4138106". Drop a long subdivision
+  // instead; the city alone is unambiguous enough for a header.
+  const region = hit.admin1 && hit.admin1.length <= 14 ? hit.admin1 : "";
+  const name = region ? `${hit.name}, ${region}` : (hit.name || "");
   return { lat: hit.latitude, lon: hit.longitude, zip: clean, name };
 }
 // Open-Meteo's geocoding API has no reverse endpoint — /v1/reverse returns
@@ -691,7 +696,9 @@ function render(forecast, loc, now){
 
     const walk = walkAssessment(h, idx, now, nextSun, temp, isDay, cloud, uvNow, horizon);
     const walkCard = $("walkCard");
-    walkCard.className = "card glass decision walk";
+    // Only the walk-state class is swapped. Reassigning className wiped the size
+    // classes the grid depends on, which silently undid every .w-large rule.
+    walkCard.classList.remove("walk-ideal","walk-golden","walk-warm","walk-cold","walk-paw","walk-rain-alert");
     if (walk.cls) walkCard.classList.add(walk.cls);
     $("walkPrimary").textContent = walk.primary;
 
@@ -797,14 +804,18 @@ function renderHomeMinis(home){
   if (all.length) saveBattRoster(all);
 
   const watch = loadBattWatch();
-  const watched = watch === null ? all : all.filter((b) => watch.includes(b.name));
+  const watched = watch === null ? all : all.filter((b) => watch.some((k) => devMatches(b, k)));
   const isLow = (b) => b.flag || (typeof b.level === "number" && b.level <= S.battThreshold);
   const low = watched.filter(isLow);
 
   // Levels for everything watched, worst first — a count alone tells you something is
   // wrong without telling you what, and this widget exists to be glanced at.
-  const rows = [...watched].sort((x, y) =>
-    (x.level ?? 101) - (y.level ?? 101));
+  const rows = [...watched].sort((x, y) => {
+    // Pinned first, then worst-first. Without the pin a full lock never appears.
+    const px = devMatches(x, S.battPrimary) ? -1 : 0;
+    const py = devMatches(y, S.battPrimary) ? -1 : 0;
+    return px !== py ? px - py : (x.level ?? 101) - (y.level ?? 101);
+  });
   const shown = rows.slice(0, 4);
 
   const card = document.querySelector('[data-widget="batteries"]');
@@ -814,12 +825,24 @@ function renderHomeMinis(home){
     low.length ? `${low.length} low` : (watched.length ? "all good" : "none watched"),
     rows.length > 4 ? `+${rows.length - 4} more watched` : `${watched.length} watched`);
 
+  // Ring gauges, the way iOS shows batteries: a dial per device with the level under
+  // it. Colour carries the state, so a glance lands before any name is read.
   const list = $("battRows");
   if (list) {
+    const R = 26, C = 2 * Math.PI * R;
     list.innerHTML = shown.map((b) => {
-      const lvl = b.level == null ? "?" : `${Math.round(b.level)}%`;
-      return `<span class="battRow${isLow(b) ? " low" : ""}">
-        <span class="battName">${b.name}</span><span class="battLvl">${lvl}</span></span>`;
+      const lvl = typeof b.level === "number" ? Math.round(b.level) : null;
+      const frac = lvl == null ? 0 : Math.max(0, Math.min(1, lvl / 100));
+      const tone = isLow(b) ? "low" : lvl != null && lvl <= 50 ? "mid" : "ok";
+      return `<span class="battCell ${tone}${devMatches(b, S.battPrimary) ? " pinned" : ""}" title="${b.name} (${b.type})">
+        <svg class="battRing" viewBox="0 0 64 64" aria-hidden="true">
+          <circle class="track" cx="32" cy="32" r="${R}"></circle>
+          <circle class="fill" cx="32" cy="32" r="${R}"
+                  stroke-dasharray="${(C * frac).toFixed(1)} ${C.toFixed(1)}"></circle>
+        </svg>
+        <span class="battPct">${lvl == null ? "?" : lvl + "%"}</span>
+        <span class="battName">${b.name}</span>
+      </span>`;
     }).join("");
   }
 }
@@ -1007,8 +1030,10 @@ function dim(){
   document.body.classList.add("dimmed");
 }
 
-function nearOff(){
-  if (!keepAwake || !isNightPhase()) return;
+function nearOff(force = false){
+  // The idle path still requires night and keep-awake — that is a screen you left on.
+  // The armed path ignores both, because an armed house is a reason on its own.
+  if (!force && (!keepAwake || !isNightPhase())) return;
   document.body.classList.add("dimmed", "nearOff");
 }
 
@@ -1051,12 +1076,17 @@ async function pollAlarm(){
     renderHomeMinis(j);
     if (!j.ok) return;
 
-    const armed = typeof j.state === "string" && j.state.startsWith("armed");
-    if (j.state !== lastAlarmState) {
-      lastAlarmState = j.state;
+    const state = typeof j.state === "string" ? j.state : "";
+    const armed = state.startsWith("armed");
+    const wanted = S.dimOnArmed === "off" ? false
+      : S.dimOnArmed === "away" ? state === "armed (away)"
+      : armed;
+
+    if (state !== lastAlarmState) {
+      lastAlarmState = state;
       // Only act on a change, so a touch can still wake the screen while armed
       // without the next poll immediately blacking it out again.
-      if (armed && keepAwake) nearOff();
+      if (wanted) nearOff(true);
       else if (!armed) undim();
     }
   } catch {

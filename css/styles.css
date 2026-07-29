@@ -845,3 +845,134 @@ body.bedside .miniSub { display: none; }
 .widgetRow.lowBatt .widgetNote { color: #f0a35c; }
 
 body.bedside .battRows { display: none; }   /* no room, and nothing to read at a glance */
+
+/* --- Widget grid ---------------------------------------------------------
+   Modelled on the iOS Today View. Sizes are the real ratios: a small widget is
+   square, a medium is 2.14:1, a large is 2 columns and nearly square. Fixed
+   ratios rather than content-height is what makes a grid of mixed widgets read
+   as a set instead of a stack of differently-sized boxes.
+
+   Everything below overrides the older per-component rules, which stay for the
+   bedside layout. */
+
+.wgrid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+  align-content: start;
+  flex: 1;
+  min-height: 0;
+}
+.w { position: relative; display: flex; flex-direction: column; overflow: hidden;
+     border-radius: 22px; padding: 15px 17px; }
+.w-small  { grid-column: span 1; aspect-ratio: 1 / 1; }
+/* Apple's own Specifications table (HIG, Widgets): at 430x932pt, small is 170x170,
+   medium 364x170, large 364x382. Large is TALLER than wide — this was 1.05 here,
+   i.e. the wrong way round. Cross-checks against the Figma kit's 360x169 / 338x354. */
+.w-medium { grid-column: span 2; aspect-ratio: 364 / 170; }
+.w-large  { grid-column: span 2; aspect-ratio: 364 / 382; }
+
+/* Label at the top, headline in the middle, detail at the foot — the shape every
+   iOS widget uses, so a grid of them scans without re-learning each one. */
+.w > .cardLabel, .w > .miniLabel, .w > .chipLabel { margin: 0 0 auto; }
+.w > .miniValue, .w > .chipValue { margin-top: auto; }
+.w .verdict { margin-top: auto; }
+
+.w.decision .support { margin-top: 6px; }
+.w.decision .aside { margin-top: 2px; }
+.w .tip { margin-top: 8px; }
+
+/* Small widgets carry one number and one qualifier; scale the type to the tile so
+   they hold their shape from a phone up to a desktop. */
+.w-small .miniValue, .w-small .chipValue { font-size: clamp(1.15rem, 6.5cqw, 1.6rem); line-height: 1.05; }
+.w-small .miniSub, .w-small .chipSub { font-size: clamp(.66rem, 3.4cqw, .78rem); margin-top: 3px; }
+.w-small { container-type: inline-size; }
+
+.w-medium.mini { container-type: inline-size; }
+.w-medium .miniValue { font-size: clamp(1.2rem, 4cqw, 1.55rem); }
+
+/* The large walk widget: verdict centred, strip pinned to the foot. */
+.w-large .outlook { margin-top: auto; }
+.w-large .hourDetail { margin-top: 8px; }
+
+/* Weather reads as a widget now rather than a page footer. */
+.w.weather { border-top: 0; gap: 4px; justify-content: center; }
+.w.weather .stats { margin-top: auto; }
+
+/* Wider screens: four columns, same tile sizes — the grid grows, the widgets do not. */
+@media (min-width: 700px) {
+  .wgrid { grid-template-columns: repeat(4, 1fr); gap: 16px; }
+  .app { max-width: 900px; margin: 0 auto; }
+}
+@media (min-width: 1100px) {
+  .wgrid { grid-template-columns: repeat(6, 1fr); }
+  .app { max-width: 1240px; }
+}
+
+/* Bedside ignores all of it: one column, no ratios, nothing but the walk verdict. */
+body.bedside .wgrid { display: flex; flex-direction: column; gap: 0; }
+body.bedside .w { aspect-ratio: auto; border-radius: 0; padding: 0; overflow: visible; }
+
+/* --- Apple alignment -----------------------------------------------------
+   Measured off a Today View screenshot rather than guessed: a larger corner
+   radius, hairline dividers splitting a widget into sections, a light weight on
+   the headline number, and a header row of title-left / secondary-right. */
+
+.w { border-radius: 21.5px; padding: 16px 18px; }   /* 21.5 is the kit's own value */
+
+/* The headline number is LIGHT, not bold. Apple sets 65° thin and lets size carry
+   the emphasis — weight there reads as shouting. */
+.w-large .verdict, .w-medium .verdict { font-weight: 300; letter-spacing: -.045em; }
+.w .temp { font-weight: 300; }
+
+/* Hairline sections, as in the weather widget. */
+.w .outlook, .w .stats, .w .battRows {
+  border-top: 1px solid var(--glass-rim-low);
+  padding-top: 11px;
+  margin-top: 11px;
+}
+.w .tip { border-top: 1px solid var(--glass-rim-low); }
+
+/* Battery rings. */
+.battRows { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.battCell { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 0; }
+.battRing { width: clamp(38px, 13cqw, 54px); aspect-ratio: 1; transform: rotate(-90deg); }
+.battRing .track { fill: none; stroke: var(--glass-rim-low); stroke-width: 6; }
+.battRing .fill  { fill: none; stroke-width: 6; stroke-linecap: round; transition: stroke-dasharray .6s ease; }
+.battCell.ok  .fill { stroke: #5fd08a; }
+.battCell.mid .fill { stroke: #f0c05c; }
+.battCell.low .fill { stroke: #f0705c; }
+.battPct { font-family: var(--mono); font-size: clamp(.72rem, 3.4cqw, .9rem); font-weight: 600; }
+.battCell.low .battPct { color: #f0705c; }
+.battName {
+  font-size: clamp(.52rem, 2.5cqw, .62rem); color: var(--soft);
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+/* Hourly outlook in Apple's column form: label above, mark, value below. */
+.outlook { grid-auto-rows: auto; align-items: end; }
+.hour { height: 30px; border-radius: 7px; }
+.hour .tick { bottom: -14px; }
+/* The pinned device keeps its ring but gains a marker, so its position reads as
+   deliberate rather than as the worst reading. */
+.battCell.pinned .battName::before { content: "◆ "; opacity: .6; }
+
+/* --- Layout corrections --------------------------------------------------
+   The label and the headline both had margin-top:auto, so they pushed against
+   each other and stranded the content at the foot of a tall tile. Only one thing
+   in a widget should push. */
+
+.w-large .verdict, .w-medium .verdict { margin-top: 0; }
+.w-large > .cardLabel, .w-medium > .cardLabel { margin-bottom: 12px; }
+/* The large tile groups its text at the top and pins the strip to the floor. */
+.w-large .support { margin-top: 4px; }
+.w-large .aside { margin-top: 2px; }
+
+/* The header must not wrap. A long place name pushed the clock onto two lines. */
+.bar { flex-wrap: nowrap; }
+.clock { white-space: nowrap; flex: none; }
+.barMeta { min-width: 0; }
+.place {
+  display: block; max-width: 100%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}

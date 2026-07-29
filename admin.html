@@ -134,6 +134,20 @@
       </p>
     </section>
 
+    <!-- Home / Ring ---------------------------------------------------- -->
+    <section class="card glass adminCard">
+      <h2 class="cardLabel">Home</h2>
+      <p class="adminNote" id="homeNote">Checking for the Pi build…</p>
+      <label class="row">
+        <span class="rowLabel">Go dark when armed<em>Ignores the hour and the keep-awake setting — an armed house is reason enough</em></span>
+        <select data-set="dimOnArmed">
+          <option value="any">Any armed state</option>
+          <option value="away">Armed away only</option>
+          <option value="off">Never</option>
+        </select>
+      </label>
+    </section>
+
     <!-- Indoor sensors -------------------------------------------------- -->
     <section class="card glass adminCard">
       <h2 class="cardLabel">Indoor sensors</h2>
@@ -159,6 +173,10 @@
       <label class="row">
         <span class="rowLabel">Low at or under<em>Percent. A device also counts as low if it sets its own flag.</em></span>
         <input type="number" min="5" max="60" step="5" data-set="battThreshold">
+      </label>
+      <label class="row">
+        <span class="rowLabel">Always show first<em>Shown whatever its level — for the one whose death locks you out</em></span>
+        <select id="battPrimaryPick"></select>
       </label>
       <ul class="widgetList battList" id="battList"></ul>
       <p class="adminActions">

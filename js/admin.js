@@ -174,6 +174,24 @@ document.addEventListener("pointermove", (e) => {
   })
 );
 
+/* --- Home / Ring ---------------------------------------------------------
+   Shows the live alarm state so it is obvious whether the Pi feed is actually
+   wired up. A setting whose effect you cannot observe is a setting you cannot trust. */
+
+async function renderHome(){
+  const note = document.getElementById("homeNote");
+  try {
+    const r = await fetch("api/home", { cache: "no-store" });
+    if (!r.ok) throw new Error("no feed");
+    const j = await r.json();
+    note.textContent = j.ok
+      ? `Connected. Alarm is “${j.state}”.`
+      : `Pi reachable but HOOBS is not: ${j.error || "unknown error"}`;
+  } catch {
+    note.textContent = "Not the Pi build — open this from the Pi URL to use Ring state.";
+  }
+}
+
 /* --- Indoor sensors ------------------------------------------------------- */
 
 function renderSensors(){
@@ -221,16 +239,27 @@ function renderBatteries(){
     : watch.length === 0 ? `Watching none — the widget will stay quiet.`
     : `Watching ${watch.length} of ${roster.length}.`;
 
+  const pick = document.getElementById("battPrimaryPick");
+  if (pick) {
+    // Labelled with the type, since two devices share the name "Front Door".
+    pick.innerHTML = ['<option value="">None</option>'].concat(roster.map((d) => {
+      const dev = typeof d === "string" ? { name: d } : d;
+      const key = devKey(dev);
+      const label = dev.type ? `${dev.name} (${dev.type})` : dev.name;
+      return `<option value="${key.replace(/"/g, "&quot;")}"${key === S.battPrimary ? " selected" : ""}>${label}</option>`;
+    })).join("");
+  }
+
   ul.innerHTML = roster.map((d) => {
     // Tolerate the old name-only roster from a previous version.
     const dev = typeof d === "string" ? { name: d } : d;
-    const on = watch === null || watch.includes(dev.name);
+    const on = watch === null || watch.some((s) => devMatches(dev, s));
     const lvl = dev.level == null ? null : Math.round(dev.level);
     const low = dev.flag || (lvl != null && lvl <= S.battThreshold);
     const meta = [dev.type, lvl == null ? null : `${lvl}%`].filter(Boolean).join(" · ");
     return `<li class="widgetRow${on ? "" : " off"}${low ? " lowBatt" : ""}">
       <label class="widgetPick">
-        <input type="checkbox" ${on ? "checked" : ""} data-batt="${dev.name.replace(/"/g, "&quot;")}">
+        <input type="checkbox" ${on ? "checked" : ""} data-batt="${devKey(dev).replace(/"/g, "&quot;")}">
         <span class="widgetName">${dev.name}</span>
         <span class="widgetNote">${meta || "no level reported"}${low ? " — low" : ""}</span>
       </label>
@@ -245,12 +274,16 @@ document.addEventListener("change", (e) => {
   // An empty watch list means "all", so the first unticked box has to be expanded
   // into an explicit list or it would read as "watch nothing".
   let watch = loadBattWatch();
-  const names = roster.map((d) => (typeof d === "string" ? d : d.name));
-  if (watch === null) watch = [...names];   // expand "all" before removing one from it
-  const name = cb.dataset.batt;
-  watch = cb.checked ? [...new Set([...watch, name])] : watch.filter((n) => n !== name);
+  if (watch === null) watch = roster.map(devKey);   // expand "all" before removing one from it
+  const key = cb.dataset.batt;
+  watch = cb.checked ? [...new Set([...watch, key])] : watch.filter((n) => n !== key);
   saveBattWatch(watch);
   renderBatteries(); flash();
+});
+
+document.getElementById("battPrimaryPick").addEventListener("change", (e) => {
+  S.battPrimary = e.target.value;
+  saveSettings(S); renderBatteries(); flash();
 });
 
 document.getElementById("battAll").addEventListener("click", () => {
@@ -293,7 +326,7 @@ document.getElementById("resetAll").addEventListener("click", () => {
    "dashboard_snapshot", "dashboard_keepAwake"].forEach((k) => localStorage.removeItem(k));
   S = loadSettings();
   layout = loadLayout();
-  bindFields(); renderLists(); applyMaskVars(S); renderMask(); describeData(); renderBatteries(); renderSensors();
+  bindFields(); renderLists(); applyMaskVars(S); renderMask(); describeData(); renderBatteries(); renderSensors(); renderHome();
   flash("Reset");
 });
 
@@ -304,6 +337,7 @@ renderMask();
 describeData();
 renderBatteries();
 renderSensors();
+renderHome();
 // Materialise the current layout on open. Until something is changed it exists only
 // as defaults in memory, so nothing has actually been written down — which makes the
 // stored state a surprise rather than a record.
