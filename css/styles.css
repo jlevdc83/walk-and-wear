@@ -1583,3 +1583,92 @@ body.bedside .vizGauge, body.bedside .vizSun { max-width: 26cqh; }
   padding: 10px 12px; resize: vertical;
 }
 .moveBox:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* --- Bedside: a display, not a blown-up phone -------------------------------
+   Three things were wrong on the real device. It was a white lightbox beside a
+   bed; the tiles were half empty with the content stacked at the top; and two
+   tiles left a whole phone answering a single question. */
+
+/* Dark at every hour, not only at night. A bedside screen is read from a dark
+   bedroom at 3 a.m. as often as in daylight, and the light palette is wrong for
+   both — a lightbox in the dark, washed out by a window. Colour is left to the
+   things that carry meaning: the walk verdict, a low battery, an open door. */
+body.bedside,
+body.bedside.phase-day,
+body.bedside.phase-dawn,
+body.bedside.phase-dusk {
+  --ink: #EDEEF0;
+  --muted: #9BA2AB;
+  --soft: rgba(235, 238, 242, .58);
+  --glass-tint: rgba(22, 24, 28, .74);
+  --glass-rim: rgba(255, 255, 255, .15);
+  --glass-rim-low: rgba(255, 255, 255, .07);
+  --glass-contrast: 1;
+  --glass-shadow: none;
+}
+/* The label tokens are bound to the glass set on tiles, so they need restating
+   here or a tile would take the light-appearance ink back. */
+body.bedside .w,
+body.bedside .card,
+body.bedside .mini { --ink: #EDEEF0; --muted: #9BA2AB; }
+body.bedside .w-small { --glass-tint: rgba(22, 24, 28, .62); }
+
+/* The verdict tints were mixed for white tiles and read as pastel smears on dark.
+   Keep the hue, drop the lightness. */
+body.bedside .walk.walk-ideal, body.bedside .walk.walk-golden { --glass-tint: rgba(22, 50, 34, .8); }
+body.bedside .walk.walk-warm  { --glass-tint: rgba(52, 44, 22, .8); }
+body.bedside .walk.walk-paw   { --glass-tint: rgba(54, 34, 20, .8); }
+body.bedside .walk.walk-bad   { --glass-tint: rgba(56, 24, 26, .8); }
+
+/* Content spreads over the tile instead of stacking at the top and leaving a dead
+   band underneath. The strip anchors to the bottom edge, the verdict to the top. */
+body.bedside .w { justify-content: space-between; }
+body.bedside .walk .verdict { margin: 0; }
+
+/* The weather tile was the emptiest thing on the screen: a temperature, a
+   condition, and then nothing. The stats strip was dropped for being detail — at
+   this size it is what makes the tile worth its half of the display. */
+body.bedside .weather .stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1.6cqw;
+  margin-top: auto;
+}
+body.bedside .weather .statLabel { font-size: 3.4cqh; letter-spacing: .02em; }
+body.bedside .weather .statValue { font-size: 5.6cqh; }
+body.bedside .weather .statSub   { font-size: 3.2cqh; }
+
+/* Sizes tuned when the bedside slot held two tiles. At four the same values wrap
+   the verdict onto three lines and push the hourly strip off the bottom edge, so
+   they are capped against the tile's width as well as its height — whichever runs
+   out first. */
+body.bedside .verdict { font-size: min(26cqh, 20cqw); }
+body.bedside .support { font-size: min(11cqh, 8cqw); }
+
+/* Measured at four tiles: the verdict, its support line and the strip came to
+   125px inside a 326px tile, so nearly two thirds of it was empty brown. The
+   strip is the part that gains from height — it is a graph, not a caption — so
+   it takes the slack rather than the type growing until the words wrap. */
+/* The strip keeps its own horizontal layout — overriding it to a flex column
+   turned the hourly row into a vertical ladder running down over the verdict. It
+   only needs to stop being pushed around: the tile spreads its children, the
+   larger verdict above takes up the slack, and what is left lands as breathing
+   room rather than a hole. */
+
+/* `anywhere` broke inside words: "Front door" came out as "Fron / t door" and
+   "Batteries" as "Batt / erie / s". Wrap between words only and let a genuinely
+   over-long single word ride out of view rather than shatter. */
+body.bedside .verdict,
+body.bedside .miniLabel { overflow-wrap: normal; word-break: normal; hyphens: none; }
+/* max(floor, min(...)): capping against width alone drove these to 4.8px in the
+   masked slot, where the tiles are narrower still. Apple's 11pt minimum is the
+   floor, and a label that cannot fit at 11pt wraps rather than shrinking under it. */
+body.bedside .miniLabel { font-size: max(var(--fs-floor), min(3.1cqh, 5.6cqw)); }
+body.bedside .miniValue { font-size: max(var(--fs-floor), min(5.2cqh, 13cqw)); }
+body.bedside .verdict   { font-size: max(1.25rem, min(26cqh, 20cqw)); }
+body.bedside .support   { font-size: max(var(--fs-floor), min(11cqh, 8cqw)); }
+
+/* Four stats across a quarter-width tile truncated every value ("8:23…", "15 m…").
+   Two rows of two gives each one room to say what it is. */
+body.bedside .weather .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.2cqh 2cqw; }
+body.bedside .weather .statSub { display: none; }   /* the qualifier, not the reading */

@@ -201,7 +201,7 @@ const POLLEN_KEY = "ww_pollen_covered";
 const LAYOUT_KEY = "dashboard_layout";
 const DEFAULT_LAYOUT = {
   portrait: ["wear", "walk", "bring", "protect", "weather"],
-  bedside:  ["walk", "weather"],
+  bedside:  ["walk", "weather", "lock", "batteries"],
 };
 
 function loadLayout(){
