@@ -1062,3 +1062,107 @@ body.phase-day, body.phase-dawn { --ink: var(--glassLabel1); --muted: var(--glas
 .hour { border-radius: var(--w-inner); }
 .w .zipInput, .w .zipSubmit { border-radius: var(--w-inner); }
 .card .zipInput, .card .zipSubmit { border-radius: calc(26px - 20px); }  /* the locate card's own margin */
+
+/* --- Apple's 11pt text floor ---------------------------------------------
+   HIG, Widgets: "Avoid very small font sizes. In general, display text using
+   fonts at 11 points or larger. Text in a font that's smaller than 11 points can
+   be too hard for many people to read."
+
+   Fifteen rules here were under it, the worst at 8.3px — barely two thirds of the
+   minimum. Small labels had been shrunk to make dense tiles fit, which is solving
+   a layout problem by making the text unreadable.
+
+   Also from the same page: 16pt is the standard widget margin (already used), and
+   11pt is the tighter margin for grouping content inside one. */
+
+:root { --fs-floor: 0.6875rem; }   /* 11px */
+
+.widgetHead, .awakeBtn, .barMeta, .cardLabel, .chipLabel,
+.statLabel, .statSub, .miniLabel, .buildMeta, .adminSaved,
+.maskReadout, .battRow, .hour .tick { font-size: var(--fs-floor); }
+
+.w-small .miniSub, .w-small .chipSub { font-size: clamp(var(--fs-floor), 3.4cqw, .78rem); }
+.battName { font-size: clamp(var(--fs-floor), 2.5cqw, .74rem); }
+.battPct  { font-size: clamp(.78rem, 3.4cqw, .95rem); }
+
+/* The tighter 11pt margin, for groupings inside a tile. */
+.w .outlook, .w .stats, .w .battRows { padding-top: 11px; margin-top: 11px; }
+
+/* Labels grew, so give the ticks room rather than letting them collide. */
+.outlook { padding-bottom: 17px; }
+.hour .tick { bottom: -16px; }
+
+/* --- Bedside: a persistent widget screen ---------------------------------
+   The enclosure aperture is 124x58mm — 2.14:1 — which is exactly a medium
+   widget's ratio (364x170 = 2.141). So the bedside display is not a stripped-down
+   view of the app: it is Apple's widgets at their own proportions, left on.
+
+   Whatever is chosen for the bedside context lays out as a row of real tiles,
+   scaled to the aperture. One medium fills it; two smalls sit side by side. */
+
+body.bedside .wgrid {
+  display: flex;
+  flex-direction: row;
+  gap: 2.2cqh;
+  height: 100%;
+  align-items: stretch;
+}
+body.bedside .w {
+  aspect-ratio: auto;
+  flex: 1 1 0;
+  min-width: 0;
+  border-radius: 4.2cqh;          /* concentric with the aperture's own 5mm */
+  padding: 3.4cqh 3.2cqh;
+  overflow: hidden;
+  container-type: size;
+}
+/* A medium tile alone should fill the slot; two smalls share it evenly. */
+body.bedside .w-large, body.bedside .w-medium { flex: 2 1 0; }
+body.bedside .w-small { flex: 1 1 0; }
+
+body.bedside .cardLabel, body.bedside .miniLabel, body.bedside .chipLabel {
+  display: block; font-size: 9cqh; letter-spacing: .14em; margin-bottom: 2cqh;
+}
+body.bedside .verdict { font-size: 26cqh; line-height: 1; margin: 0; }
+body.bedside .support { font-size: 11cqh; margin-top: 1.5cqh; }
+body.bedside .miniValue, body.bedside .chipValue { font-size: 20cqh; margin-top: auto; }
+body.bedside .miniSub, body.bedside .chipSub { font-size: 9cqh; }
+body.bedside .temp { font-size: 22cqh; }
+body.bedside .outlook { padding-bottom: 3cqh; margin-top: auto; padding-top: 2.5cqh; }
+body.bedside .hour { height: 9cqh; }
+body.bedside .hour .tick { bottom: -3.4cqh; font-size: 6.5cqh; }
+body.bedside .battRows { grid-template-columns: repeat(4, 1fr); margin-top: auto; }
+body.bedside .battRing { width: 22cqh; }
+body.bedside .battPct { font-size: 8cqh; }
+body.bedside .battName { display: none; }
+body.bedside .aside, body.bedside .tip, body.bedside .stats,
+body.bedside .ambient, body.bedside .hourDetail { display: none; }
+
+/* --- Bedside widget screen, corrections ----------------------------------
+   The earlier bedside rules stripped the walk card back to bare text, which was
+   right when bedside was a single-verdict view and wrong now that it is a widget
+   screen. Every tile keeps the material. */
+
+body.bedside .walk {
+  background: var(--glass-tint);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-sat));
+  box-shadow: var(--glass-shadow), inset 0 1px 0 0 var(--glass-rim);
+  border-radius: 4.2cqh;
+  padding: 3.4cqh 3.2cqh;
+}
+body.bedside .walk::before { display: block; }
+
+/* The clock was taking a third of the aperture. It is a label here, not the
+   headline — the widgets are. */
+body.bedside .bar { padding: 0 0 1.5cqh; }
+body.bedside .clock { font-size: 11cqh; }
+body.bedside .place { font-size: 5cqh; }
+
+/* Values must shrink rather than spill: "excellent" ran out of its tile. */
+body.bedside .miniValue, body.bedside .chipValue {
+  font-size: clamp(9cqh, 17cqw, 20cqh);
+  line-height: 1.05;
+  overflow-wrap: anywhere;
+}
+body.bedside .verdict { overflow-wrap: anywhere; }
