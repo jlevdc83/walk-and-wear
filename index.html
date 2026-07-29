@@ -49,22 +49,21 @@
     <!-- Shown only when location is unavailable. Replaces window.prompt(), which iOS
          suppresses in standalone PWA mode, leaving no way to recover. -->
     <section class="card glass locate hidden" id="locateCard">
-      <h2 class="cardLabel">Location needed</h2>
+      <h2 class="cardLabel" id="locateTitle">Location</h2>
       <p class="locateNote" id="locateNote">Allow location, or enter a ZIP code to continue.</p>
       <form class="locateForm" id="locateForm">
         <input
           id="zipInput"
           class="zipInput"
           type="text"
-          inputmode="numeric"
           autocomplete="postal-code"
-          pattern="[0-9]{5}"
-          maxlength="5"
-          placeholder="20001"
-          aria-label="ZIP code"
+          maxlength="60"
+          placeholder="20001, or Eagles Mere, PA"
+          aria-label="ZIP code, or city and state"
           required />
-        <button class="zipSubmit" type="submit">Use ZIP</button>
+        <button class="zipSubmit" type="submit">Search</button>
       </form>
+      <ul class="placeResults" id="placeResults" hidden aria-label="Matching places"></ul>
       <div class="locateActions">
         <button class="linkBtn" type="button" id="retryLocation">Use my location</button>
         <!-- Only shown when the card was opened on purpose, not after a failure —
@@ -183,7 +182,7 @@
 
   </div>
 
-  <div class="buildMeta" id="buildMeta">v84</div>
+  <div class="buildMeta" id="buildMeta">v85</div>
 
   <script src="js/config.js"></script>
   <script src="js/app.js"></script>

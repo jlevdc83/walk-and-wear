@@ -345,7 +345,8 @@ document.getElementById("clearCache").addEventListener("click", () => {
 });
 
 document.getElementById("clearLocation").addEventListener("click", () => {
-  ["dashboard_zip", "dashboard_place", "dashboard_snapshot"].forEach((k) => localStorage.removeItem(k));
+  ["dashboard_zip", "dashboard_place", "dashboard_snapshot", "dashboard_pin"]
+    .forEach((k) => localStorage.removeItem(k));
   describeData(); flash("Location forgotten");
 });
 

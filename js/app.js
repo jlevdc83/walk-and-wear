@@ -1,4 +1,4 @@
-const VERSION = "v84";
+const VERSION = "v85";
 const RETRY_MS = 60 * 1000;      // after a transient failure — not the full refresh interval
 
 // Everything tunable now lives in js/config.js and is edited on admin.html.
@@ -148,10 +148,69 @@ async function geocodeZip(zip){
   // the header. Open-Meteo has no short-code field — admin1_id is a numeric geoname
   // id, and using it printed "Washington D.C., 4138106". Drop a long subdivision
   // instead; the city alone is unambiguous enough for a header.
-  const region = hit.admin1 && hit.admin1.length <= 14 ? hit.admin1 : "";
-  const name = region ? `${hit.name}, ${region}` : (hit.name || "");
-  return { lat: hit.latitude, lon: hit.longitude, zip: clean, name };
+  return { lat: hit.latitude, lon: hit.longitude, zip: clean, name: placeLabel(hit) };
 }
+/// Typing "PA" is the natural thing to do, and Open-Meteo only ever returns the
+/// spelled-out admin1 ("Pennsylvania"), so a query typed with a postal abbreviation
+/// would never match its own result. Static data, no upkeep.
+const US_STATES = {
+  AL:"Alabama", AK:"Alaska", AZ:"Arizona", AR:"Arkansas", CA:"California",
+  CO:"Colorado", CT:"Connecticut", DE:"Delaware", DC:"District of Columbia",
+  FL:"Florida", GA:"Georgia", HI:"Hawaii", ID:"Idaho", IL:"Illinois", IN:"Indiana",
+  IA:"Iowa", KS:"Kansas", KY:"Kentucky", LA:"Louisiana", ME:"Maine", MD:"Maryland",
+  MA:"Massachusetts", MI:"Michigan", MN:"Minnesota", MS:"Mississippi", MO:"Missouri",
+  MT:"Montana", NE:"Nebraska", NV:"Nevada", NH:"New Hampshire", NJ:"New Jersey",
+  NM:"New Mexico", NY:"New York", NC:"North Carolina", ND:"North Dakota", OH:"Ohio",
+  OK:"Oklahoma", OR:"Oregon", PA:"Pennsylvania", RI:"Rhode Island",
+  SC:"South Carolina", SD:"South Dakota", TN:"Tennessee", TX:"Texas", UT:"Utah",
+  VT:"Vermont", VA:"Virginia", WA:"Washington", WV:"West Virginia", WI:"Wisconsin",
+  WY:"Wyoming",
+};
+
+/// Search by place name. Open-Meteo's geocoder takes a bare name — it does not parse
+/// "City, ST" — so the region is split off and used to rank the matches rather than
+/// being sent as part of the query.
+async function searchPlaces(query){
+  const raw = String(query || "").trim();
+  if (!raw) throw new Error("QUERY_REQUIRED");
+  const [namePart, ...rest] = raw.split(",");
+  const region = rest.join(",").trim();
+  const wanted = (US_STATES[region.toUpperCase()] || region).toLowerCase();
+
+  const url = `https://geocoding-api.open-meteo.com/v1/search`
+    + `?name=${encodeURIComponent(namePart.trim())}&count=10&language=en&format=json`;
+  const r = await fetch(url, { cache: "no-store" });
+  const j = await r.json();
+  const hits = j?.results || [];
+  if (!hits.length) throw new Error("NO_MATCH");
+
+  const scored = hits.map((h) => {
+    const admin1 = (h.admin1 || "").toLowerCase();
+    // A typed region is a filter in spirit but a ranking in practice — a near miss
+    // should still be offered rather than silently dropped.
+    const match = wanted && (admin1 === wanted || admin1.startsWith(wanted)) ? 0 : 1;
+    return { hit: h, rank: wanted ? match : 0 };
+  }).sort((a, b) => a.rank - b.rank);
+
+  return scored.slice(0, 6).map(({ hit }) => {
+    const name = placeLabel(hit);
+    // Only say what the name has not already said. placeLabel keeps a short admin1,
+    // so repeating it gave "Eagles Mere, Pennsylvania / Pennsylvania · United States".
+    const parts = [];
+    if (hit.admin1 && !name.includes(hit.admin1)) parts.push(hit.admin1);
+    if (hit.country) parts.push(hit.country);
+    return { lat: hit.latitude, lon: hit.longitude, name, detail: parts.join(" · ") };
+  });
+}
+
+/// One label rule for every source, so a pinned place and a geocoded ZIP read alike.
+/// A long subdivision is dropped: spelled out, "Washington D.C., District of Columbia"
+/// wrapped the header, and Open-Meteo has no short-code field to fall back on.
+function placeLabel(hit){
+  const region = hit.admin1 && hit.admin1.length <= 14 ? hit.admin1 : "";
+  return region ? `${hit.name}, ${region}` : (hit.name || "");
+}
+
 // Open-Meteo's geocoding API has no reverse endpoint — /v1/reverse returns
 // {"error":true,"reason":"Not Found"}. The old call was wrapped in a try/catch that
 // swallowed the 404 and returned "", so every GPS-located load showed "Location —".
@@ -197,7 +256,31 @@ function geolocate(){
 // Resolution order: device location, then a saved ZIP, then ask. Asking is now a
 // card in the page — window.prompt() is suppressed in an iOS standalone PWA, which
 // left the app with no reachable way to supply a location at all.
+const PIN_KEY = "dashboard_pin";
+
+function savedPin(){
+  try {
+    const raw = localStorage.getItem(PIN_KEY);
+    if (!raw) return null;
+    const pin = JSON.parse(raw);
+    return typeof pin?.lat === "number" && typeof pin?.lon === "number" ? pin : null;
+  } catch { return null; }
+}
+function setPin(pin){
+  localStorage.setItem(PIN_KEY, JSON.stringify(pin));
+  // A pin supersedes both of the older mechanisms; leaving them set would let a
+  // stale ZIP win on the next load.
+  localStorage.removeItem("dashboard_zip");
+  forgetPlace();
+}
+function clearPin(){ localStorage.removeItem(PIN_KEY); }
+
 async function resolveLocation(){
+  // A place you picked outranks everything, and unlike the ZIP path it needs no
+  // network call — the coordinates were resolved once, when you chose it.
+  const pin = savedPin();
+  if (pin) return { lat: pin.lat, lon: pin.lon, zip: "", name: pin.name || "" };
+
   // A saved ZIP is a deliberate choice and outranks the device. Trying GPS first meant
   // a manually set ZIP was silently ignored whenever location happened to work — which
   // made changing location impossible in the one case that matters.
@@ -223,6 +306,8 @@ function showLocate(message){
   $("weather").classList.add("hidden");
   $("cancelLocate").classList.add("hidden");   // nothing to go back to
   if (message) $("locateNote").textContent = message;
+  $("locateTitle").textContent = "Location needed";
+  showPlaceResults([]);
   $("updatedLine").textContent = "Location needed";
   $("zipMeta").textContent = "No location";
 }
@@ -234,11 +319,18 @@ function openLocate(){
   $("decisions").classList.add("hidden");
   $("weather").classList.add("hidden");
   $("cancelLocate").classList.remove("hidden");
-  const saved = localStorage.getItem("dashboard_zip") || "";
-  $("zipInput").value = saved;
-  $("locateNote").textContent = saved
-    ? `Currently using ZIP ${saved}. Enter another, or switch back to your location.`
-    : "Enter a ZIP code, or keep using your device location.";
+  // Opened on purpose, not after a failure — so it is a change, not an emergency.
+  $("locateTitle").textContent = "Location";
+  showPlaceResults([]);
+
+  const pin = savedPin();
+  const savedZip = localStorage.getItem("dashboard_zip") || "";
+  $("zipInput").value = "";
+  $("locateNote").textContent = pin
+    ? `Currently ${pin.name || "a pinned place"}. Search for another, or switch back to your device.`
+    : savedZip
+      ? `Currently ZIP ${savedZip}. Search for another, or switch back to your device.`
+      : "Search a ZIP code or a city, or keep using your device location.";
 }
 
 function hideLocate(){
@@ -1089,28 +1181,65 @@ function bootFromCache(){
 
 /* --- Boot ------------------------------------------------------------- */
 
+function showPlaceResults(list){
+  const box = $("placeResults");
+  box.innerHTML = "";
+  if (!list || !list.length) { box.hidden = true; return; }
+  list.forEach((place) => {
+    const li = document.createElement("li");
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "placeResult";
+    btn.innerHTML = `<span class="prName"></span><span class="prDetail"></span>`;
+    btn.querySelector(".prName").textContent = place.name;
+    btn.querySelector(".prDetail").textContent = place.detail || "";
+    btn.addEventListener("click", () => {
+      setPin({ lat: place.lat, lon: place.lon, name: place.name });
+      showPlaceResults([]);
+      hideLocate();
+      refresh();
+    });
+    li.appendChild(btn);
+    box.appendChild(li);
+  });
+  box.hidden = false;
+}
+
 $("locateForm").addEventListener("submit", async (event) => {
   event.preventDefault();
-  const zip = $("zipInput").value.trim();
-  if (!/^\d{5}$/.test(zip)) {
-    $("locateNote").textContent = "Enter a five-digit ZIP code.";
-    return;
-  }
+  const query = $("zipInput").value.trim();
+  if (!query) return;
+  showPlaceResults([]);
   $("locateNote").textContent = "Looking that up…";
+
+  // A five-digit entry is a ZIP and resolves to exactly one place, so it is pinned
+  // straight away. Anything else is a name, which can be ambiguous — "Springfield"
+  // is a real problem — so those are offered as a list to choose from.
   try {
-    await geocodeZip(zip);            // validate before storing, so a typo can't stick
-    localStorage.setItem("dashboard_zip", zip);
-    forgetPlace();
-    hideLocate();
-    refresh();
-  } catch {
-    $("locateNote").textContent = `No match for ${zip}. Check the ZIP and try again.`;
+    if (/^\d{5}$/.test(query)) {
+      const hit = await geocodeZip(query);
+      setPin({ lat: hit.lat, lon: hit.lon, name: hit.name || `ZIP ${query}` });
+      hideLocate();
+      refresh();
+      return;
+    }
+    const matches = await searchPlaces(query);
+    $("locateNote").textContent = matches.length === 1
+      ? "One match — tap to use it."
+      : `${matches.length} matches — tap the right one.`;
+    showPlaceResults(matches);
+  } catch (e) {
+    $("locateNote").textContent = e && e.message === "NO_MATCH"
+      ? `Nothing found for "${query}". Try the city name, or a ZIP code.`
+      : `Couldn't look that up. Check the connection and try again.`;
   }
 });
 
 // Drops the saved ZIP so resolveLocation falls back to the device again.
 $("retryLocation").addEventListener("click", () => {
   localStorage.removeItem("dashboard_zip");
+  clearPin();                 // otherwise the pin wins and the device never gets asked
+  showPlaceResults([]);
   forgetPlace();
   $("locateNote").textContent = "Asking for location…";
   hideLocate();

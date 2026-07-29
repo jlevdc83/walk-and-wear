@@ -1072,8 +1072,13 @@ body.phase-day, body.phase-dawn {
   --glassLabel2: #727272;
 }
 
-body { --ink: var(--glassLabel1); --muted: var(--glassLabel2); }
-body.phase-day, body.phase-dawn { --ink: var(--glassLabel1); --muted: var(--glassLabel2); }
+/* Scoped to glass, not to the whole document. These are Apple's "Labels - Liquid
+   Glass" values, and they are calibrated for text on a material that has already
+   compressed whatever is behind it into a narrow light band. The header bar sits on
+   the raw sky gradient with no material under it, so binding them at body level put
+   #727272 straight onto mid-blue and the place name became unreadable. Off-glass
+   text keeps the phase palette's own ink/muted, which is chosen for that gradient. */
+.w, .card, .mini { --ink: var(--glassLabel1); --muted: var(--glassLabel2); }
 
 /* Battery rings and the warning state. */
 .battCell.ok  .fill { stroke: var(--sysGreen); }
@@ -1534,3 +1539,35 @@ body.bedside .vizGauge, body.bedside .vizSun { max-width: 26cqh; }
    bedside weather readout is absolutely positioned in the top-right corner; its
    shrink-to-fit width was resolving to 20px, wrapping the temperature one glyph
    per line into the white bar that showed down the right edge of the aperture. */
+
+
+/* The header bar sits on the sky with no material beneath it, so it needs a palette
+   picked against that gradient rather than against glass. Its top stop is a mid
+   blue (luminance ~0.15), which is the worst case for dark text: even pure black
+   only reaches 4:1 there, short of the 4.5:1 small text needs. White clears it at
+   5.2:1, and the night phase was already white — so the bar simply stays white in
+   every phase. The shadow is insurance for the lighter skies of dawn and dusk. */
+.bar {
+  --ink: #ffffff;
+  --muted: rgba(255, 255, 255, .92);
+  --soft: rgba(255, 255, 255, .78);
+}
+.bar .clock, .bar .place, .bar .updated, .bar .awakeBtn {
+  text-shadow: 0 1px 3px rgba(10, 20, 40, .45);
+}
+
+/* Matching places. A name is ambiguous in a way a ZIP is not — there are Springfields
+   in more than thirty states — so the choice is shown rather than guessed at. */
+.placeResults { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 6px; }
+.placeResult {
+  display: flex; flex-direction: column; gap: 2px; width: 100%;
+  padding: 10px 12px; text-align: left;
+  font: inherit; color: var(--ink);
+  background: var(--glass-rim-low);
+  border: 0; border-radius: 10px; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.placeResult:hover, .placeResult:focus-visible { background: var(--glass-tint); }
+.placeResult:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.prName { font-weight: 600; }
+.prDetail { font-size: .8rem; color: var(--soft); }
