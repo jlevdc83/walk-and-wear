@@ -1,0 +1,104 @@
+<meta charset="utf-8">
+<title>Walk &amp; Wear — app icon</title>
+<style>
+  body { margin: 0; background: #6b7f96; font: 13px ui-monospace, monospace; color: #fff; }
+  #board { display: flex; flex-wrap: wrap; gap: 28px; align-items: flex-end; padding: 28px; }
+  figure { margin: 0; display: flex; flex-direction: column; gap: 8px; align-items: center; }
+  figcaption { opacity: .8; }
+</style>
+
+<!-- Apple's continuous-corner squircle, from the Claude Apps icon handoff. Normalised
+     to a unit box; scaled to 824 and offset by 100 for the .icns master geometry. -->
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <clipPath id="sq" clipPathUnits="objectBoundingBox">
+      <path d="M.3437,0 L.6563,0 C.7553,0 .8048,0 .8581,.0166 C.9296,.0412 .9588,.0704 .9834,.1419
+               C1,.1952 1,.2447 1,.3437 L1,.6563 C1,.7553 1,.8048 .9834,.8581 C.9588,.9296 .9296,.9588
+               .8581,.9834 C.8048,1 .7553,1 .6563,1 L.3437,1 C.2447,1 .1952,1 .1419,.9834 C.0704,.9588
+               .0412,.9296 .0166,.8581 C0,.8048 0,.7553 0,.6563 L0,.3437 C0,.2447 0,.1952 .0166,.1419
+               C.0412,.0704 .0704,.0412 .1419,.0166 C.1952,0 .2447,0 .3437,0 Z"/>
+    </clipPath>
+  </defs>
+</svg>
+
+<div id="board"></div>
+
+<script>
+/* Walk & Wear, in the Claude Apps icon family.
+
+   Same construction as the "On Blue" handoff — squircle field, inset graphite card,
+   a glowing glyph and a pill below it. Two things differ on purpose:
+
+   - The field is amber. Blue is the Dock launcher, teal is Remote In and green is Fix
+     My Mail; a fourth cool colour would be indistinguishable from them at 32px, which
+     is the size that decides whether an icon works.
+   - The glyph is a paw, not a spark. It is the app's own mark — the walk verdict is
+     drawn with paws — and it is the one shape that says "dog" with no text.
+
+   `bleed` fills the canvas instead of insetting the 824/1024 squircle. iOS masks a
+   home-screen icon itself, so an Apple-margin master would land as a small icon
+   floating inside a box. The .icns-style master keeps the margin; PWA cuts do not. */
+function icon(size, bleed) {
+  const m = bleed ? 0 : size * 100 / 1024;
+  const inner = bleed ? size : size * 824 / 1024;
+  const u = inner / 1024;                       // px per master unit, at this size
+
+  const el = (css) => {
+    const d = document.createElement('div');
+    d.style.cssText = 'position:absolute;' + css;
+    return d;
+  };
+
+  const canvas = document.createElement('div');
+  canvas.className = 'icon-canvas';
+  canvas.dataset.size = size;
+  canvas.style.cssText = 'position:relative;flex:none;width:' + size + 'px;height:' + size + 'px;';
+
+  // Field. Amber, lit from the top like the rest of the family.
+  const sq = el('left:' + m + 'px;top:' + m + 'px;width:' + inner + 'px;height:' + inner + 'px;'
+    + 'overflow:hidden;background:linear-gradient(180deg,#FFB03C,#E8730A);'
+    + (bleed ? '' : 'clip-path:url(#sq);'));
+
+  // Graphite card, at the handoff's geometry.
+  sq.appendChild(el('left:16%;top:20%;width:68%;height:60%;border-radius:' + 70 * u + 'px;'
+    + 'background:linear-gradient(180deg,#2A2A32,#131317);'
+    + 'box-shadow:0 ' + 18 * u + 'px ' + 32 * u + 'px rgba(70,35,5,.45);'));
+
+  // Warm halo, mirroring the spark's glow — but weaker than the family's. A glow that
+  // reads as atmosphere at 1024 fills the gaps between the toes at 32 and turns the
+  // paw into a blob, and 32 is this app's smallest cut.
+  sq.appendChild(el('left:22%;top:28%;width:30%;height:30%;border-radius:50%;'
+    + 'background:rgba(255,176,60,.34);filter:blur(' + 24 * u + 'px);'));
+
+  // The paw: four toes over a pad. Larger than the spark it replaces, and spread
+  // wider — four shapes need more room to stay four shapes than one shape does.
+  const toe = (cx, cy, w, h) => el('left:' + (cx - w / 2) + '%;top:' + (cy - h / 2) + '%;'
+    + 'width:' + w + '%;height:' + h + '%;border-radius:50%;'
+    + 'background:linear-gradient(180deg,#FFFFFF,#FFE3C2);');
+  sq.appendChild(toe(23.0, 39.0, 8.6, 10.4));
+  sq.appendChild(toe(31.6, 31.6, 8.8, 10.8));
+  sq.appendChild(toe(41.6, 31.6, 8.8, 10.8));
+  sq.appendChild(toe(50.2, 39.0, 8.6, 10.4));
+  sq.appendChild(el('left:26.0%;top:44.0%;width:21.5%;height:17%;'
+    + 'border-radius:50% 50% 46% 46% / 58% 58% 42% 42%;'
+    + 'background:linear-gradient(180deg,#FFFFFF,#FFE3C2);'));
+
+  // The pill sits where the family puts its cursor bar, but reads as the hourly
+  // outlook strip — tinted with the app's own walk-ideal green.
+  sq.appendChild(el('left:50%;top:64%;width:24%;height:5%;border-radius:999px;'
+    + 'background:rgba(120,230,150,.5);'));
+
+  canvas.appendChild(sq);
+  return canvas;
+}
+
+const board = document.getElementById('board');
+[1024, 512, 180, 128, 32, 16].forEach((s) => {
+  const f = document.createElement('figure');
+  f.appendChild(icon(s, true));
+  const c = document.createElement('figcaption');
+  c.textContent = s + '×' + s;
+  f.appendChild(c);
+  board.appendChild(f);
+});
+</script>
