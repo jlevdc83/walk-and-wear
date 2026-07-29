@@ -1,4 +1,4 @@
-const VERSION = "v65";
+const VERSION = "v66";
 const REFRESH_MS = 20 * 60 * 1000;
 const RETRY_MS = 60 * 1000;      // after a transient failure — not the full refresh interval
 const RUN_HOT = true;
@@ -964,6 +964,157 @@ if ("serviceWorker" in navigator) {
 const bedsideParam = new URLSearchParams(location.search).get("bedside");
 if (bedsideParam === "flip") document.body.classList.add("flip");
 
+/* --- Widgets -------------------------------------------------------------
+   What appears, and in what order, per context. Previously this was hardcoded
+   in CSS, so changing it meant editing a stylesheet.
+
+   Two contexts, because they are genuinely different products: portrait is a
+   phone in a hand, bedside is a 124 x 58 mm slot read from across a room. The
+   bedside default is deliberately short — that aperture cannot hold the
+   dashboard and stay readable, which is the whole reason bedside mode exists.
+
+   The clock is not a widget. It is the one thing a bedside display must always
+   show, and making it optional would only create a way to break it. */
+
+const WIDGETS = [
+  { id: "walk",    label: "Dog walk",  note: "Verdict, timing, and the hourly strip" },
+  { id: "wear",    label: "Wear",      note: "Jacket and clothing" },
+  { id: "bring",   label: "Bring",     note: "Umbrella or shell — only when needed" },
+  { id: "protect", label: "Protect",   note: "Sunscreen and sunglasses — only when needed" },
+  { id: "weather", label: "Weather",   note: "Temperature and the stats strip" },
+];
+
+const LAYOUT_KEY = "dashboard_layout";
+const DEFAULT_LAYOUT = {
+  portrait: ["wear", "walk", "bring", "protect", "weather"],
+  bedside:  ["walk", "weather"],
+};
+
+function loadLayout(){
+  try {
+    const saved = JSON.parse(localStorage.getItem(LAYOUT_KEY) || "null");
+    if (!saved) return structuredClone(DEFAULT_LAYOUT);
+    // Drop ids that no longer exist, so a removed widget cannot wedge the layout.
+    const known = new Set(WIDGETS.map((w) => w.id));
+    return {
+      portrait: (saved.portrait || DEFAULT_LAYOUT.portrait).filter((id) => known.has(id)),
+      bedside: (saved.bedside || DEFAULT_LAYOUT.bedside).filter((id) => known.has(id)),
+    };
+  } catch {
+    return structuredClone(DEFAULT_LAYOUT);
+  }
+}
+
+let layout = loadLayout();
+
+function saveLayout(){
+  try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout)); } catch { /* private mode */ }
+}
+
+function currentContext(){
+  return document.body.classList.contains("bedside") ? "bedside" : "portrait";
+}
+
+/// Visibility and order both come from the config. Order uses flex `order` rather than
+/// moving nodes, so nothing has to be re-rendered when the arrangement changes.
+function applyLayout(){
+  const active = layout[currentContext()] || [];
+  WIDGETS.forEach((w) => {
+    const el = document.querySelector(`[data-widget="${w.id}"]`);
+    if (!el) return;
+    const i = active.indexOf(w.id);
+    el.classList.toggle("widgetOff", i === -1);
+    el.style.order = i === -1 ? "" : String(i);
+  });
+  // The chips row has no meaning if neither chip is in play.
+  const chips = $("chips");
+  if (chips) {
+    const anyChip = active.includes("bring") || active.includes("protect");
+    chips.classList.toggle("widgetOff", !anyChip);
+    const ci = Math.min(...["bring", "protect"].map((id) => {
+      const i = active.indexOf(id); return i === -1 ? Infinity : i;
+    }));
+    chips.style.order = Number.isFinite(ci) ? String(ci) : "";
+  }
+}
+
+/* --- Widgets panel ------------------------------------------------------- */
+
+function renderWidgetList(context){
+  const ul = $(context === "portrait" ? "listPortrait" : "listBedside");
+  if (!ul) return;
+  const active = layout[context] || [];
+  // Chosen widgets first in their configured order, then the rest, unchecked.
+  const rows = [
+    ...active.map((id) => WIDGETS.find((w) => w.id === id)).filter(Boolean),
+    ...WIDGETS.filter((w) => !active.includes(w.id)),
+  ];
+  ul.innerHTML = rows.map((w) => {
+    const i = active.indexOf(w.id);
+    const on = i !== -1;
+    return `<li class="widgetRow${on ? "" : " off"}">
+      <label class="widgetPick">
+        <input type="checkbox" ${on ? "checked" : ""} data-ctx="${context}" data-id="${w.id}">
+        <span class="widgetName">${w.label}</span>
+        <span class="widgetNote">${w.note}</span>
+      </label>
+      <span class="widgetMove">
+        <button type="button" data-move="up" data-ctx="${context}" data-id="${w.id}"
+                aria-label="Move ${w.label} up" ${on && i > 0 ? "" : "disabled"}>↑</button>
+        <button type="button" data-move="down" data-ctx="${context}" data-id="${w.id}"
+                aria-label="Move ${w.label} down" ${on && i < active.length - 1 ? "" : "disabled"}>↓</button>
+      </span>
+    </li>`;
+  }).join("");
+}
+
+function renderWidgetPanel(){
+  renderWidgetList("portrait");
+  renderWidgetList("bedside");
+}
+
+$("widgetsPanel").addEventListener("change", (e) => {
+  const cb = e.target.closest("input[type=checkbox]");
+  if (!cb) return;
+  const { ctx, id } = cb.dataset;
+  const list = layout[ctx];
+  if (cb.checked) { if (!list.includes(id)) list.push(id); }
+  else { layout[ctx] = list.filter((x) => x !== id); }
+  saveLayout(); renderWidgetPanel(); applyLayout();
+});
+
+$("widgetsPanel").addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-move]");
+  if (!btn) return;
+  const { ctx, id, move } = btn.dataset;
+  const list = layout[ctx];
+  const i = list.indexOf(id);
+  const j = move === "up" ? i - 1 : i + 1;
+  if (i === -1 || j < 0 || j >= list.length) return;
+  [list[i], list[j]] = [list[j], list[i]];
+  saveLayout(); renderWidgetPanel(); applyLayout();
+});
+
+function openWidgets(){
+  renderWidgetPanel();
+  $("widgetsPanel").classList.remove("hidden");
+  $("decisions").classList.add("hidden");
+  $("weather").classList.add("hidden");
+}
+function closeWidgets(){
+  $("widgetsPanel").classList.add("hidden");
+  $("decisions").classList.remove("hidden");
+  $("weather").classList.remove("hidden");
+  applyLayout();
+}
+
+$("widgetsBtn").addEventListener("click", openWidgets);
+$("widgetsDone").addEventListener("click", closeWidgets);
+$("widgetsReset").addEventListener("click", () => {
+  layout = structuredClone(DEFAULT_LAYOUT);
+  saveLayout(); renderWidgetPanel(); applyLayout();
+});
+
 // Peek: hold to get the full app while the phone is mounted.
 //
 // The orientation rule assumed you could rotate the device. The bedside one is fixed
@@ -983,7 +1134,8 @@ function applyBedsideMode(){
   const landscape = window.innerWidth > window.innerHeight;
   const on = bedsideParam !== null && landscape && !peeking;
   document.body.classList.toggle("bedside", on);
-  if (on) clearHourDetail();
+  if (on) { clearHourDetail(); closeWidgets(); }
+  applyLayout();   // the two contexts have different widget sets
 }
 
 function endPeek(){

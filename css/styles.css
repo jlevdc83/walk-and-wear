@@ -99,6 +99,63 @@ body {
 }
 
 .hidden { display: none !important; }
+/* Set by the widget config, distinct from .hidden so the two cannot fight —
+   .hidden is transient state, .widgetOff is a preference. */
+.widgetOff { display: none !important; }
+
+.updatedRow { display: flex; align-items: baseline; justify-content: flex-end; gap: 8px; }
+.widgetsBtn {
+  font-size: .82rem;
+  line-height: 1;
+  color: var(--soft);
+  background: none;
+  border: 0;
+  padding: 2px 3px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.widgetsBtn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+body.bedside .widgetsBtn, body.bedside .updatedRow { display: none; }
+
+/* --- Widgets panel ------------------------------------------------------ */
+
+.widgetCols { display: grid; gap: 20px; }
+.widgetHead {
+  margin: 0 0 8px;
+  font-family: var(--mono);
+  font-size: .6rem;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.widgetList { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.widgetRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--glass-rim-low);
+}
+.widgetRow.off .widgetName, .widgetRow.off .widgetNote { opacity: .45; }
+.widgetPick { flex: 1; min-width: 0; display: grid; grid-template-columns: auto 1fr; gap: 0 10px; cursor: pointer; }
+.widgetPick input { grid-row: span 2; align-self: center; width: 19px; height: 19px; accent-color: var(--accent); }
+.widgetName { font-size: .95rem; font-weight: 600; }
+.widgetNote { font-size: .72rem; color: var(--soft); }
+.widgetMove { display: flex; gap: 3px; }
+.widgetMove button {
+  font-size: .85rem;
+  width: 30px;
+  height: 30px;
+  color: var(--ink);
+  background: var(--glass-tint);
+  border: 1px solid var(--glass-rim-low);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.widgetMove button[disabled] { opacity: .25; cursor: default; }
+.widgetMove button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+@media (min-width: 620px) { .widgetCols { grid-template-columns: 1fr 1fr; } }
 
 /* --- The material ------------------------------------------------------ */
 
