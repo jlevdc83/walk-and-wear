@@ -122,13 +122,27 @@
       </label>
     </section>
 
-    <!-- Bedside aperture ---------------------------------------------- -->
+    <!-- Bedside display ------------------------------------------------ -->
     <section class="card glass adminCard">
-      <h2 class="cardLabel">Bedside aperture</h2>
+      <h2 class="cardLabel">Bedside display</h2>
       <p class="adminNote">
-        The window the enclosure leaves open, in millimetres. Defaults match the CAD.
-        The preview is to scale against the iPhone 11's display — tape a paper mask to the
-        phone and compare before anything is printed.
+        Set per device — this is the one setting that says which phone you are on. The
+        bedside layout only appears in landscape either way, so turning it on here still
+        leaves you the full app when you pick the phone up and hold it upright.
+      </p>
+      <label class="row">
+        <span class="rowLabel">This device<em>Off is the normal dashboard</em></span>
+        <select data-set="bedsideMode">
+          <option value="off">Normal dashboard</option>
+          <option value="on">Bedside — full screen</option>
+          <option value="mask">Bedside — masked to the aperture</option>
+        </select>
+      </label>
+
+      <p class="adminNote">
+        Below: the window the enclosure leaves open, in millimetres. Defaults match the
+        CAD. The preview is to scale against the iPhone 11's display — tape a paper mask
+        to the phone and compare before anything is printed.
       </p>
 
       <div class="maskPreview" id="maskPreview">
@@ -154,7 +168,7 @@
         <input type="checkbox" data-set="maskFlip">
       </label>
       <p class="adminActions">
-        <a class="linkBtn" href="index.html?bedside" target="_blank" rel="noopener">Open bedside view</a>
+        <a class="linkBtn" href="index.html" target="_blank" rel="noopener">Open the display</a>
       </p>
     </section>
 

@@ -1,4 +1,4 @@
-const VERSION = "v91";
+const VERSION = "v92";
 const RETRY_MS = 60 * 1000;      // after a transient failure — not the full refresh interval
 
 // Everything tunable now lives in js/config.js and is edited on admin.html.
@@ -1430,34 +1430,32 @@ if ("serviceWorker" in navigator) {
   });
 }
 
-// Bedside mode: masked to the enclosure aperture, reduced layout. A query param so it
-// can be tested from any browser; the Pi build serves it by default. ?bedside=flip
-// swaps the 4mm offset for the other landscape mounting.
+// Bedside mode: masked to the enclosure aperture, reduced layout.
+//
 // Orientation is the context. The bedside phone is fixed landscape in the enclosure,
 // so landscape means "read from across the room": masked, glanceable, nothing to touch.
 // Portrait means it is in a hand — the full app, with detail on tap. Pick the bedside
 // phone up and turn it and you get the app; put it back and it is a clock again.
 //
-// Gated on ?bedside so rotating a phone you're holding never masks it: only the Pi
-// build (and explicit testing) opts in.
-/// Bedside mode has to survive being added to the home screen. iOS launches a
-/// pinned web app from the manifest's start_url, which carries no query string, so
-/// a phone added from `?bedside` would come back as the ordinary dashboard on every
-/// launch. Remembering the choice on the device makes the parameter a one-time
-/// switch rather than something the URL has to keep carrying.
+// Gated on the bedside setting so rotating a phone you're holding never masks it:
+// only a device told it is the bedside one opts in.
+/// Which face this device shows, from the admin page rather than a query string.
+/// The string still works — it is how you try the other layout from any browser —
+/// but it now sets the preference rather than being the preference, so a phone
+/// pinned to the home screen keeps it. iOS relaunches from the manifest's
+/// start_url, which carries no query at all.
 ///
-/// Safe to persist: the bedside layout only engages in landscape, so the same phone
-/// held upright still gets the full app. `?bedside=off` forgets it.
-const BEDSIDE_KEY = "ww_bedside";
+/// Safe to persist: the bedside layout only engages in landscape, so the same
+/// phone held upright still gets the full app.
 const bedsideParam = (() => {
   const asked = new URLSearchParams(location.search).get("bedside");
-  try {
-    if (asked === "off") { localStorage.removeItem(BEDSIDE_KEY); return null; }
-    if (asked !== null) { localStorage.setItem(BEDSIDE_KEY, asked); return asked; }
-    return localStorage.getItem(BEDSIDE_KEY);
-  } catch { return asked; }   // private mode: fall back to the URL alone
+  if (asked !== null) {
+    const mode = asked === "off" ? "off" : asked === "mask" ? "mask" : "on";
+    S.bedsideMode = mode;
+    saveSettings(S);
+  }
+  return S.bedsideMode === "off" ? null : S.bedsideMode === "mask" ? "mask" : "";
 })();
-if (bedsideParam === "flip") document.body.classList.add("flip");
 
 /* --- Widgets -------------------------------------------------------------
    What appears, and in what order, per context. Previously this was hardcoded

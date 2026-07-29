@@ -9,14 +9,16 @@ tailscale serve mapping, backups — belong in `pi-services/BACKLOG.md` instead.
 
 ## Decisions waiting on Josh
 
-- [ ] **Which landscape orientation the phone mounts in** — sets `?bedside=flip`, and
-  it cannot be changed after the enclosure is printed
-  - context: `?bedside=flip` mirrors `maskOffset` so the notch is buried on the other
-    side. The CAD fixes the offset relative to the enclosure, not to which way up the
-    phone goes in, so the app can't infer it. Decide by which way the Lightning port
-    faces relative to the Hue keypad, then set the default in `SETTING_DEFAULTS` and
-    stop passing the param. Admin has a "Mirror offset" toggle to test both against a
-    paper mask before anything is printed.
+- [ ] **Which landscape orientation the phone mounts in** — no longer urgent, and no
+  longer irreversible
+  - context: this used to be `?bedside=flip`, a URL you could not undo. It is now the
+    "Mirror offset" toggle in the admin page's Bedside display section, so it can be
+    flipped at any time — including after the enclosure is printed. The CAD fixes the
+    4 mm offset relative to the enclosure rather than to which way up the phone goes
+    in, so the app still cannot infer it; decide by which way the Lightning port faces
+    relative to the Hue keypad, and check it against a paper mask before printing.
+    (The `.flip` class that backed the old URL hardcoded the shift at -2.87% and so
+    ignored whatever `maskOffset` was actually set to — removed 2026-07-29.)
 
 - [ ] **Create `go/walk`** → `https://pi.tail1d9da7.ts.net/walk`
   - context: golink rejects scripted writes ("invalid XSRF token"), so it has to be
@@ -66,6 +68,10 @@ tailscale serve mapping, backups — belong in `pi-services/BACKLOG.md` instead.
   so a reimage restores it. Service worker registers for the first time.
 - [x] **`deploy.sh`** — 2026-07-29. Was eight hand-run `rsync` invocations in one
   session, which is the drift that broke go/docs on 2026-07-23.
+- [x] **Bedside mode is an admin toggle** — 2026-07-29. Was a query string you had to
+  remember, which a home-screen launch dropped anyway: iOS relaunches from the
+  manifest's `start_url`, which carries no query. Now a per-device setting; the URL
+  still works and sets it.
 - [x] **App icon** — 2026-07-29. Built on the Claude Apps handoff geometry
   (`tech-support/Claude Mac App/design-handoff-icon`); paw with a sun, amber field.
   `design/make-icon.py` regenerates every cut.

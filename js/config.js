@@ -71,6 +71,10 @@ const SETTING_DEFAULTS = {
   maskH: 58,
   maskOffset: 4,          // toward the keypad
   maskFlip: false,        // true if the phone mounts the other way up
+  // Which face this device shows. Set in the admin page rather than by a query
+  // string — a URL you have to remember is not a setting, and a phone pinned to
+  // the home screen relaunches without one anyway.
+  bedsideMode: "off",     // "off" | "on" | "mask"
 };
 
 // iPhone 11 active display, landscape. Locked — see the handoff's rule about not

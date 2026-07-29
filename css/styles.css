@@ -603,9 +603,10 @@ body, body * { transition: color .8s ease, opacity .8s ease, background-color .8
   --mask-shift: 2.87%;   /* +4 mm toward the keypad, as a share of display width */
 }
 
-/* Flip if the phone mounts in the other landscape orientation — the CAD fixes the
-   offset relative to the enclosure, not to which way up the phone goes in. */
-body.bedside.flip { --mask-shift: -2.87%; }
+/* Mirroring the mount is "Mirror offset" in the admin page, which negates the
+   offset inside maskMetrics(). A `.flip` class used to do it here too, with the
+   shift hardcoded at -2.87% — so it ignored whatever offset the aperture section
+   was actually set to, and the two could disagree. One mechanism now. */
 
 body.bedside { background: #000; overflow: hidden; }
 body.bedside .sky { display: none; }
