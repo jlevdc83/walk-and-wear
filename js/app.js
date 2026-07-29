@@ -1,4 +1,4 @@
-const VERSION = "v90";
+const VERSION = "v91";
 const RETRY_MS = 60 * 1000;      // after a transient failure — not the full refresh interval
 
 // Everything tunable now lives in js/config.js and is edited on admin.html.
@@ -1440,7 +1440,23 @@ if ("serviceWorker" in navigator) {
 //
 // Gated on ?bedside so rotating a phone you're holding never masks it: only the Pi
 // build (and explicit testing) opts in.
-const bedsideParam = new URLSearchParams(location.search).get("bedside");
+/// Bedside mode has to survive being added to the home screen. iOS launches a
+/// pinned web app from the manifest's start_url, which carries no query string, so
+/// a phone added from `?bedside` would come back as the ordinary dashboard on every
+/// launch. Remembering the choice on the device makes the parameter a one-time
+/// switch rather than something the URL has to keep carrying.
+///
+/// Safe to persist: the bedside layout only engages in landscape, so the same phone
+/// held upright still gets the full app. `?bedside=off` forgets it.
+const BEDSIDE_KEY = "ww_bedside";
+const bedsideParam = (() => {
+  const asked = new URLSearchParams(location.search).get("bedside");
+  try {
+    if (asked === "off") { localStorage.removeItem(BEDSIDE_KEY); return null; }
+    if (asked !== null) { localStorage.setItem(BEDSIDE_KEY, asked); return asked; }
+    return localStorage.getItem(BEDSIDE_KEY);
+  } catch { return asked; }   // private mode: fall back to the URL alone
+})();
 if (bedsideParam === "flip") document.body.classList.add("flip");
 
 /* --- Widgets -------------------------------------------------------------

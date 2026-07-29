@@ -350,7 +350,7 @@ describePollen();
 const MOVE_KEYS = [
   "dashboard_layout", "dashboard_pin", "dashboard_zip", "dashboard_place",
   "dashboard_keepAwake", "ww_settings", "ww_battWatch", "ww_battRoster",
-  "ww_sensorRoster",
+  "ww_sensorRoster", "ww_bedside",
 ];
 
 document.getElementById("moveCopy").addEventListener("click", async () => {
