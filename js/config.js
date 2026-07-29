@@ -81,6 +81,18 @@ const WIDGETS = [
   { id: "bring",   label: "Bring",     note: "Umbrella or shell — only when needed" },
   { id: "protect", label: "Protect",   note: "Sunscreen and sunglasses — only when needed" },
   { id: "weather", label: "Weather",   note: "Temperature and the stats strip" },
+
+  // Compact widgets. The four marked (Pi) need the Pi build — the public one has no
+  // way to read HOOBS without shipping a credential in client JavaScript.
+  { id: "pollen",     label: "Pollen",          note: "Europe only — Open-Meteo has no US pollen data" },
+  { id: "airquality", label: "Air quality",     note: "Outdoor PM2.5 and US AQI" },
+  { id: "humidity",   label: "Humidity",        note: "Outdoor, with the dew point" },
+  { id: "sun",        label: "Sun",             note: "Next sunrise or sunset, counting down" },
+  { id: "tomorrow",   label: "Tomorrow",        note: "High, low and conditions" },
+  { id: "lock",       label: "Front door (Pi)", note: "Lock state — the bedtime check" },
+  { id: "indoorair",  label: "Indoor air (Pi)", note: "The Levoit's reading" },
+  { id: "indoorhum",  label: "Indoor humidity (Pi)", note: "Against the 60% target" },
+  { id: "batteries",  label: "Batteries (Pi)",  note: "Anything low or flat — 18 devices report" },
 ];
 
 const LAYOUT_KEY = "dashboard_layout";

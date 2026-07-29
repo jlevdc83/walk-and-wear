@@ -1,4 +1,4 @@
-const VERSION = "v69";
+const VERSION = "v70";
 const RETRY_MS = 60 * 1000;      // after a transient failure — not the full refresh interval
 
 // Everything tunable now lives in js/config.js and is edited on admin.html.
@@ -252,13 +252,50 @@ function forgetPlace(){
 
 /* --- Forecast --------------------------------------------------------- */
 
+/* --- Air quality and pollen ---------------------------------------------
+   A second free, keyless Open-Meteo endpoint. Fetched only when one of the two
+   widgets that need it is switched on, so nobody pays for a call they cannot see.
+   Failure is silent: these are nice to know, and a missing pollen count should
+   never take the walk verdict down with it. */
+
+let airData = null;
+
+function airWanted(){
+  const active = layout[currentContext()] || [];
+  return active.includes("pollen") || active.includes("airquality");
+}
+
+async function fetchAir(lat, lon){
+  if (!airWanted()) { airData = null; return; }
+  try {
+    const url = `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}` +
+      `&current=pm2_5,us_aqi,ozone,alder_pollen,birch_pollen,grass_pollen,ragweed_pollen` +
+      `&timezone=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`;
+    const r = await fetch(url, { cache: "no-store" });
+    airData = r.ok ? (await r.json()).current : null;
+  } catch {
+    airData = null;
+  }
+}
+
+/// Grains/m³ thresholds. Coarse on purpose — "high" is the actionable word, and a
+/// precise count you cannot feel is not worth the space.
+function pollenBand(v){
+  if (v == null) return null;
+  if (v < 1) return "none";
+  if (v < 10) return "low";
+  if (v < 50) return "moderate";
+  if (v < 200) return "high";
+  return "very high";
+}
+
 async function fetchForecast(lat, lon){
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const url =
     `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
     `&timezone=${encodeURIComponent(tz)}` +
     `&temperature_unit=${S.units === "C" ? "celsius" : "fahrenheit"}&windspeed_unit=mph` +
-    `&hourly=temperature_2m,apparent_temperature,precipitation_probability,precipitation,cloudcover,windspeed_10m,uv_index,is_day,weathercode,relative_humidity_2m` +
+    `&hourly=temperature_2m,apparent_temperature,precipitation_probability,precipitation,cloudcover,windspeed_10m,uv_index,is_day,weathercode,relative_humidity_2m,dewpoint_2m` +
     `&daily=temperature_2m_max,temperature_2m_min,sunrise,sunset` +
     `&forecast_days=2&t=${Date.now()}`;
   const r = await fetch(url, { cache: "no-store" });
@@ -673,6 +710,82 @@ function render(forecast, loc, now){
     $("walkSecondary").textContent = support;
     $("walkTertiary").textContent = aside;
     renderOutlook(outlook);
+    renderMinis({ h, d, idx, now, nextSun, feels, wind });
+}
+
+/* --- Compact widgets ------------------------------------------------------
+   Each writes only if its element exists and it is switched on. Anything with no
+   data says so plainly rather than showing an em dash, which reads as broken. */
+
+function setMini(id, value, sub){
+  const v = $(`${id}Value`), s = $(`${id}Sub`);
+  if (v) v.textContent = value;
+  if (s) s.textContent = sub || "";
+}
+
+function renderMinis({ h, d, idx, now, nextSun }){
+  // Outdoor humidity, with the dew point — above about 65°F it is oppressive in a
+  // way a percentage never conveys.
+  const rh = h.relative_humidity_2m?.[idx];
+  const dew = h.dewpoint_2m?.[idx];
+  setMini("hum", rh == null ? "—" : `${round(rh)}%`,
+    dew == null ? "outdoor" : `dew point ${round(dew)}°${S.units === "C" ? "C" : "F"}`);
+
+  // Sun: whichever comes next, counting down.
+  if (nextSun) {
+    const mins = Math.max(0, Math.round((nextSun.time - now) / 60000));
+    const when = mins < 60 ? `in ${mins}m` : `in ${Math.round(mins / 60)}h`;
+    setMini("sun", fmtShortTime(nextSun.time), `${nextSun.label.toLowerCase()} ${when}`);
+  } else setMini("sun", "—", "");
+
+  // Tomorrow, for deciding tonight.
+  const thi = d.temperature_2m_max?.[1], tlo = d.temperature_2m_min?.[1];
+  setMini("tom", thi == null ? "—" : `${round(thi)}° / ${round(tlo)}°`, "high / low");
+
+  // Pollen: report the worst of the four rather than four numbers nobody reads.
+  if (airData) {
+    const kinds = [["alder", airData.alder_pollen], ["birch", airData.birch_pollen],
+                   ["grass", airData.grass_pollen], ["ragweed", airData.ragweed_pollen]];
+    const worst = kinds.filter(([, v]) => v != null).sort((a, b) => b[1] - a[1])[0];
+    if (worst) {
+      setMini("pollen", pollenBand(worst[1]), `${worst[0]} ${Math.round(worst[1])} grains/m³`);
+    } else {
+      // Open-Meteo's pollen comes from the CAMS *European* dataset, so every count is
+      // null in North America — verified: Berlin returns values, DC returns nulls.
+      // Saying so beats a permanently blank widget that looks broken.
+      setMini("pollen", "no data", "Europe only — no free US source");
+    }
+
+    const aqi = airData.us_aqi, pm = airData.pm2_5;
+    setMini("aq", aqi == null ? "—" : `AQI ${Math.round(aqi)}`,
+      pm == null ? "" : `PM2.5 ${pm.toFixed(1)} µg/m³`);
+  } else {
+    setMini("pollen", "—", "unavailable");
+    setMini("aq", "—", "unavailable");
+  }
+}
+
+/// The four HOOBS widgets. Driven by the Pi feed, so they say so on the public build
+/// rather than sitting empty and looking broken.
+function renderHomeMinis(home){
+  if (!home || !home.ok) {
+    ["lock", "inAir", "inHum", "batt"].forEach((id) => setMini(id, "—", "needs the Pi build"));
+    return;
+  }
+  const lock = (home.locks || [])[0];
+  setMini("lock", lock ? lock.state : "—", lock ? lock.name : "no lock found");
+
+  setMini("inAir", home.air ? home.air.quality : "—",
+    home.air && home.air.pm25 != null ? `PM2.5 ${home.air.pm25}` : (home.air ? home.air.name : ""));
+
+  const hum = home.humidity;
+  // 60% is Josh's stated target; say which side of it we are on, not just the number.
+  setMini("inHum", hum ? `${Math.round(hum.value)}%` : "—",
+    hum ? (hum.value < 60 ? `below the 60% target` : `at or above 60%`) : "");
+
+  const low = home.lowBatteries || [];
+  setMini("batt", low.length ? `${low.length} low` : "all good",
+    low.length ? low.slice(0, 2).map((b) => `${b.name} ${b.level ?? "?"}%`).join(" · ") : "18 devices reporting");
 }
 
 function timingPhrase(timing){
@@ -721,6 +834,7 @@ async function refresh(){
     setZipMeta(loc.name || loc.zip || await placeName(loc));
 
     const forecast = await fetchForecast(loc.lat, loc.lon);
+    await fetchAir(loc.lat, loc.lon);
     saveSnapshot(forecast, loc);
     render(forecast, loc, now);
 
@@ -889,7 +1003,7 @@ let lastAlarmState = null;
 
 async function pollAlarm(){
   try {
-    const r = await fetch("api/alarm", { cache: "no-store" });
+    const r = await fetch("api/home", { cache: "no-store" });
     if (!r.ok) throw new Error("NO_FEED");
     const j = await r.json();
     hasAlarmFeed = true;
@@ -898,6 +1012,7 @@ async function pollAlarm(){
     // Testing only the HTTP status treated that as a live feed reporting "not
     // armed", which called undim() and reset the idle timers — so the bedside
     // display would never dim while HOOBS was down. Leave the timers alone.
+    renderHomeMinis(j);
     if (!j.ok) return;
 
     const armed = typeof j.state === "string" && j.state.startsWith("armed");
@@ -910,6 +1025,7 @@ async function pollAlarm(){
     }
   } catch {
     hasAlarmFeed = false;   // public build, or the Pi is unreachable — no feature, no error
+    renderHomeMinis(null);
   }
 }
 

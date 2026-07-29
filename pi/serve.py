@@ -97,20 +97,51 @@ def _get(path):
         return _request(path, headers={"authorization": token})
 
 
-def alarm_state():
+def home_state():
+    """One pass over the accessory tree for everything the bedside widgets need.
+
+    Deliberately one call, not four: hoobsd is answering for a display that polls,
+    and walking the tree once per refresh is the difference between polite and rude.
+
+    Shapes verified against the live tree — notably there is **no** temperature
+    characteristic anywhere in HOOBS, so indoor temp is not available by this route.
+    Humidity comes from the Levoit humidifier, not a thermostat.
+    """
     with _cache_lock:
         if _cache["payload"] is not None and (time.time() - _cache["at"]) < CACHE_TTL:
             return _cache["payload"]
     try:
-        state = None
+        alarm, locks, humidity, air, low = None, [], None, None, []
         for room in _get("/api/accessories"):
             for a in room.get("accessories", []):
-                if a.get("type") != "security_system":
-                    continue
-                for c in a.get("characteristics", []):
-                    if c.get("type") == "security_system_current_state":
-                        state = SECURITY_STATE.get(c.get("value"), "unknown")
-        payload = {"ok": True, "state": state or "no alarm found", "at": time.time()}
+                name, typ = a.get("name"), a.get("type")
+                ch = {c["type"]: c.get("value") for c in a.get("characteristics", [])
+                      if c.get("value") is not None}
+
+                if typ == "security_system" and "security_system_current_state" in ch:
+                    alarm = SECURITY_STATE.get(ch["security_system_current_state"], "unknown")
+                if typ == "lock":
+                    locks.append({"name": name,
+                                  "state": LOCK_STATE.get(ch.get("lock_current_state"), "unknown")})
+                if "current_relative_humidity" in ch and humidity is None:
+                    humidity = {"name": name, "value": ch["current_relative_humidity"]}
+                if "air_quality" in ch and air is None:
+                    air = {"name": name,
+                           "quality": AIR_QUALITY.get(ch["air_quality"], "unknown"),
+                           "pm25": ch.get("pm_t_density")}
+
+                lvl = ch.get("battery_level")
+                if ch.get("status_low_battery") == 1 or (isinstance(lvl, (int, float)) and lvl <= 20):
+                    low.append({"name": name, "level": lvl})
+
+        payload = {
+            "ok": True, "at": time.time(),
+            "state": alarm or "no alarm found",   # kept for the dimming logic
+            "locks": locks,
+            "humidity": humidity,
+            "air": air,
+            "lowBatteries": sorted(low, key=lambda b: (b["level"] is None, b["level"])),
+        }
     except Exception as exc:  # noqa: BLE001
         payload = {"ok": False, "state": "unknown", "error": str(exc)[:160], "at": time.time()}
     with _cache_lock:
@@ -124,8 +155,9 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self):  # noqa: N802
         path = self.path.split("?", 1)[0]
 
-        if path == "/api/alarm":
-            return self._send(200, "application/json", json.dumps(alarm_state()).encode())
+        # /api/alarm kept as an alias so an older cached client keeps working.
+        if path in ("/api/home", "/api/alarm"):
+            return self._send(200, "application/json", json.dumps(home_state()).encode())
 
         rel = "index.html" if path in ("/", "") else path.lstrip("/")
         target = (ROOT / rel).resolve()
