@@ -1,4 +1,4 @@
-const VERSION = "v88";
+const VERSION = "v89";
 const RETRY_MS = 60 * 1000;      // after a transient failure — not the full refresh interval
 
 // Everything tunable now lives in js/config.js and is edited on admin.html.
@@ -440,10 +440,10 @@ function clothingPlan(tempF, feelsLikeF, windMph, rainingNow){
   let clothes = "";
   let jacket = "No jacket";
 
-  if (t >= 75) clothes = "shorts + short sleeves";
-  else if (t >= 60) clothes = "pants + short sleeves";
-  else if (t >= 48) clothes = "pants + long sleeves";
-  else clothes = "warm layers";
+  if (t >= 75) clothes = "Shorts + short sleeves";
+  else if (t >= 60) clothes = "Pants + short sleeves";
+  else if (t >= 48) clothes = "Pants + long sleeves";
+  else clothes = "Warm layers";
 
   if (rainingNow) jacket = t <= 50 ? "Rain jacket over layers" : "Rain jacket";
   else if (windMph >= 18 && t <= 62) jacket = "Windbreaker";
@@ -737,15 +737,15 @@ function render(forecast, loc, now){
     $("ambientLine").textContent = `${round(wind)} mph wind • ${round(cloud)}% cloud`;
 
     setStats([
-      { k: "UV", v: isDay ? `${round(uvNow)}` : "—", b: isDay ? `max ${round(uv4h)}` : "Night" },
+      { k: "UV", v: isDay ? `${round(uvNow)}` : "—", b: isDay ? `Max ${round(uv4h)}` : "Night" },
       // Label carries the event so the value is just a time — "Sunset 8:24 PM" was
       // too wide for a quarter column and truncated to "Sunset 8:…".
       { k: nextSun ? nextSun.label : "Next sun", v: nextSun ? fmtShortTime(nextSun.time) : "—", b: `Hi ${round(hi)}° / Lo ${round(lo)}°` },
       // Same window the Bring decision uses. Reporting a 4-hour peak here while the
       // umbrella was decided on a 3-hour one produced "RAIN 74%" with no umbrella
       // advice — two numbers from different windows, reading as a contradiction.
-      { k: "Rain", v: `${round(horizon.peak90)}%`, b: "next 3h" },
-      { k: "Wind", v: `${round(wind)} mph`, b: "current" }
+      { k: "Rain", v: `${round(horizon.peak90)}%`, b: "Next 3h" },
+      { k: "Wind", v: `${round(wind)} mph`, b: "Current" }
     ]);
 
     const wear = clothingPlan(temp, feels, wind, rainingNow);
@@ -851,7 +851,7 @@ function renderMinis({ h, d, idx, now, nextSun }){
   const dew = h.dewpoint_2m?.[idx];
   setIcon("hum", "droplet");
   setMini("hum", rh == null ? "—" : `${round(rh)}%`,
-    dew == null ? "outdoor" : `dew point ${round(dew)}°${S.units === "C" ? "C" : "F"}`);
+    dew == null ? "Outdoor" : `Dew point ${round(dew)}°${S.units === "C" ? "C" : "F"}`);
   // 30–60% is the comfortable band; the dial marks it so a number becomes a verdict.
   const humTone = rh == null ? "" : rh > 70 || rh < 25 ? "mid" : "ok";
   setViz("hum", vizPick(S.vizStyle, {
@@ -864,7 +864,7 @@ function renderMinis({ h, d, idx, now, nextSun }){
     const mins = Math.max(0, Math.round((nextSun.time - now) / 60000));
     const when = mins < 60 ? `in ${mins}m` : `in ${Math.round(mins / 60)}h`;
     setIcon("sun", nextSun.label === "Sunrise" ? "sunrise" : "sunset");
-    setMini("sun", fmtShortTime(nextSun.time), `${nextSun.label.toLowerCase()} ${when}`);
+    setMini("sun", fmtShortTime(nextSun.time), `${nextSun.label} ${when}`);
   } else setMini("sun", "—", "");
   // Where the sun actually is between today's rise and set. A countdown says how
   // long; the arc says how much daylight is left, which is the thing you act on.
@@ -880,7 +880,7 @@ function renderMinis({ h, d, idx, now, nextSun }){
   // Tomorrow, for deciding tonight.
   const thi = d.temperature_2m_max?.[1], tlo = d.temperature_2m_min?.[1];
   setIcon("tom", "calendar");
-  setMini("tom", thi == null ? "—" : `${round(thi)}° / ${round(tlo)}°`, "high / low");
+  setMini("tom", thi == null ? "—" : `${round(thi)}° / ${round(tlo)}°`, "High / low");
   setViz("tom", vizPick(S.vizStyle, { auto: vizRange(tlo, thi, d.temperature_2m_min?.[0], d.temperature_2m_max?.[0]) }));
 
   // Pollen: report the worst of the four rather than four numbers nobody reads.
@@ -890,14 +890,14 @@ function renderMinis({ h, d, idx, now, nextSun }){
     const worst = kinds.filter(([, v]) => v != null).sort((a, b) => b[1] - a[1])[0];
     if (worst) {
       const band = pollenBand(worst[1]);
-      setMini("pollen", band, `${worst[0]} ${Math.round(worst[1])} grains/m³`);
+      setMini("pollen", sentence(band), `${sentence(worst[0])} ${Math.round(worst[1])} grains/m³`);
       const bi = POLLEN_STEPS.indexOf(band);
       setViz("pollen", vizPick(S.vizStyle, { auto: vizSteps(POLLEN_STEPS, bi, bi >= 3 ? "bad" : bi >= 2 ? "mid" : "ok") }));
     } else {
       // Open-Meteo's pollen comes from the CAMS *European* dataset, so every count is
       // null in North America — verified: Berlin returns values, DC returns nulls.
       // Saying so beats a permanently blank widget that looks broken.
-      setMini("pollen", "no data", "Europe only — no free US source");
+      setMini("pollen", "No data", "Europe only — no free US source");
       setViz("pollen", vizPick(S.vizStyle, { auto: vizSteps(POLLEN_STEPS, -1, "") }));
     }
 
@@ -910,8 +910,8 @@ function renderMinis({ h, d, idx, now, nextSun }){
     // number alone requires knowing that 50 is the good/moderate line.
     setViz("aq", vizPick(S.vizStyle, { auto: vizMeter(aqi, AQI_BANDS) }));
   } else {
-    setMini("pollen", "—", "unavailable");
-    setMini("aq", "—", "unavailable");
+    setMini("pollen", "—", "Unavailable");
+    setMini("aq", "—", "Unavailable");
   }
 }
 
@@ -919,7 +919,7 @@ function renderMinis({ h, d, idx, now, nextSun }){
 /// rather than sitting empty and looking broken.
 function renderHomeMinis(home){
   if (!home || !home.ok) {
-    ["lock", "inAir", "inHum", "batt"].forEach((id) => { setMini(id, "—", "needs the Pi build"); setViz(id, ""); });
+    ["lock", "inAir", "inHum", "batt"].forEach((id) => { setMini(id, "—", "Needs the Pi build"); setViz(id, ""); });
     return;
   }
   const lock = (home.locks || [])[0];
@@ -929,9 +929,9 @@ function renderHomeMinis(home){
   const lockGlyph = lock && lock.state === "unlocked" ? "unlock" : "lock";
   setIcon("lock", lockGlyph, lockTone);
   const lv = $("lockValue");
-  if (lv) lv.innerHTML = `<span class="valIcon">${icon(lockGlyph, lockTone)}</span>${lock ? lock.state : "—"}`;
+  if (lv) lv.innerHTML = `<span class="valIcon">${icon(lockGlyph, lockTone)}</span>${lock ? sentence(lock.state) : "—"}`;
   const ls = $("lockSub");
-  if (ls) ls.textContent = lock ? lock.name : "no lock found";
+  if (ls) ls.textContent = lock ? lock.name : "No lock found";
 
   // The lock's own battery belongs on the lock, not buried among eighteen others.
   //
@@ -970,8 +970,8 @@ function renderHomeMinis(home){
 
   const air = pick(airs, S.airSensor);
   setIcon("inAir", "air", toneFor("airQuality", air && air.quality));
-  setMini("inAir", air ? air.quality : "—",
-    air ? (air.pm25 != null ? `${air.name} · PM2.5 ${air.pm25}` : air.name) : "no sensor");
+  setMini("inAir", air ? sentence(air.quality) : "—",
+    air ? (air.pm25 != null ? `${air.name} · PM2.5 ${air.pm25}` : air.name) : "No sensor");
   // HOOBS reports a word, not a number, so a scale is the honest shape — it shows
   // how far from "excellent" the room is without inventing precision.
   const ai = air ? AIR_STEPS.indexOf(air.quality) : -1;
@@ -981,7 +981,7 @@ function renderHomeMinis(home){
   const target = S.humidityTarget;
   setIcon("inHum", "droplet", hum ? (hum.value < target ? "mid" : "ok") : "");
   setMini("inHum", hum ? `${Math.round(hum.value)}%` : "—",
-    hum ? `${hum.value < target ? "below" : "at or above"} the ${target}% target` : "no sensor");
+    hum ? `${hum.value < target ? "Below" : "At or above"} the ${target}% target` : "No sensor");
   // The target as a tick on the dial: the gap is the whole point of this widget,
   // and a sentence saying "below" makes you hold two numbers in your head.
   const inHumTone = !hum ? "" : hum.value < target ? "mid" : "ok";
@@ -1016,7 +1016,7 @@ function renderHomeMinis(home){
   setIcon("batt", "battery", low.length ? "bad" : "ok");
 
   setMini("batt",
-    low.length ? `${low.length} low` : (watched.length ? "all good" : "none watched"),
+    low.length ? `${low.length} low` : (watched.length ? "All good" : "None watched"),
     rows.length > 4 ? `+${rows.length - 4} more watched` : `${watched.length} watched`);
 
   const list = $("battRows");

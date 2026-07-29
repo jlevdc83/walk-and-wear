@@ -133,9 +133,8 @@ body.bedside .widgetsBtn, body.bedside .updatedRow { display: none; }
   margin: 0 0 8px;
   font-family: var(--mono);
   font-size: .6rem;
-  letter-spacing: .16em;
-  text-transform: uppercase;
-  color: var(--accent);
+  letter-spacing: .03em;
+    color: var(--accent);
 }
 .widgetList { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
 .widgetRow {
@@ -229,9 +228,8 @@ body.bedside .widgetsBtn, body.bedside .updatedRow { display: none; }
 .awakeBtn {
   font-family: var(--mono);
   font-size: .58rem;
-  letter-spacing: .12em;
-  text-transform: uppercase;
-  color: var(--soft);
+  letter-spacing: .03em;
+    color: var(--soft);
   background: none;
   border: 1px solid var(--glass-rim-low);
   border-radius: 99px;
@@ -272,8 +270,7 @@ body.bedside .widgetsBtn, body.bedside .updatedRow { display: none; }
   font-family: var(--mono);
   font-size: .66rem;
   font-weight: 600;
-  letter-spacing: .2em;
-  text-transform: uppercase;
+  letter-spacing: .04em;
   color: var(--soft);
 }
 
@@ -392,9 +389,8 @@ body.bedside .widgetsBtn, body.bedside .updatedRow { display: none; }
 .chipLabel {
   font-family: var(--mono);
   font-size: .6rem;
-  letter-spacing: .18em;
-  text-transform: uppercase;
-  color: var(--soft);
+  letter-spacing: .04em;
+    color: var(--soft);
 }
 .chipValue { font-size: 1.02rem; font-weight: 600; letter-spacing: -.01em; }
 .chipSub { font-size: .74rem; color: var(--soft); }
@@ -426,9 +422,8 @@ body.bedside .widgetsBtn, body.bedside .updatedRow { display: none; }
 .statLabel {
   font-family: var(--mono);
   font-size: .58rem;
-  letter-spacing: .16em;
-  text-transform: uppercase;
-  color: var(--soft);
+  letter-spacing: .03em;
+    color: var(--soft);
 }
 .statValue {
   font-family: var(--mono);
@@ -841,8 +836,8 @@ body.admin { overflow-y: auto; }
   border-radius: var(--r-chip); padding: 11px 13px;
 }
 .miniLabel {
-  font-family: var(--mono); font-size: .58rem; letter-spacing: .16em;
-  text-transform: uppercase; color: var(--soft);
+  font-family: var(--mono); font-size: .58rem; letter-spacing: .03em;
+   color: var(--soft);
 }
 .miniValue { font-size: 1.02rem; font-weight: 600; letter-spacing: -.01em; }
 .miniSub { font-size: .7rem; color: var(--soft); }
@@ -1455,7 +1450,7 @@ a.widgetsBtn { text-decoration: none; display: inline-flex; align-items: center;
 .vizStepLabel {
   flex: 0 0 100%; margin-top: 4px;
   font-family: var(--mono); font-size: var(--fs-floor);
-  letter-spacing: .08em; text-transform: uppercase; color: var(--soft);
+  letter-spacing: .02em;  color: var(--soft);
 }
 
 /* Dial — a percentage you judge against a band or a target. */
@@ -1571,3 +1566,10 @@ body.bedside .vizGauge, body.bedside .vizSun { max-width: 26cqh; }
 .placeResult:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .prName { font-weight: 600; }
 .prDetail { font-size: .8rem; color: var(--soft); }
+
+
+/* Sentence case throughout. These labels were set in uppercase with wide tracking;
+   the tracking went with it, since spacing tuned to separate capitals reads as a
+   fault between lowercase letterforms. Values that arrive lowercase from HOOBS or
+   from a band table get their first letter raised in JS, not by text-transform —
+   `capitalize` would give "Very High" where sentence case wants "Very high". */

@@ -324,7 +324,7 @@ function renderWalkOutlook(mode, outlook){
     // GO / WAIT in words — the least ambiguous version there is.
     case "labels":
       return outlook.map((s, i) => btn(s, i,
-        `<span class="hWord">${s.walkable ? "GO" : "WAIT"}</span>${tick(i)}`, "asLabel")).join("");
+        `<span class="hWord">${s.walkable ? "Go" : "Wait"}</span>${tick(i)}`, "asLabel")).join("");
 
     // Solid means go, faint means wait. One hue, no key.
     case "density":
@@ -411,11 +411,18 @@ function vizMeter(value, bands){
   </span>`;
 }
 
+/// First letter up, the rest left alone. Not CSS `capitalize`, which would render
+/// "very high" as "Very High" — sentence case raises the first word only.
+function sentence(text){
+  const t = String(text == null ? "" : text);
+  return t ? t.charAt(0).toUpperCase() + t.slice(1) : t;
+}
+
 /// A stepped scale — for ordered categories where the number means little.
 function vizSteps(labels, activeIndex, tone){
   return `<span class="viz vizSteps ${tone || ""}">${labels.map((l, i) =>
     `<span class="vizStep${i <= activeIndex && activeIndex >= 0 ? " on" : ""}" title="${l}"></span>`
-  ).join("")}<span class="vizStepLabel">${activeIndex >= 0 ? labels[activeIndex] : "no reading"}</span></span>`;
+  ).join("")}<span class="vizStepLabel">${activeIndex >= 0 ? sentence(labels[activeIndex]) : "No reading"}</span></span>`;
 }
 
 /// A dial — for a percentage that has a target worth seeing the distance to.
