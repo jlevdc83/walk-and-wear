@@ -94,14 +94,15 @@ function icon(size, bleed) {
   return canvas;
 }
 
-/// A sun: solid disc plus eight radial pills. The rays have to be pills that point
-/// outward, not dots on a ring — as dots they stop reading as rays and collapse into
-/// a smudge at the small cuts.
+/// A sun: solid disc plus eight radial pills, unglowed. The rays have to be pills
+/// that point outward, not dots on a ring — as dots they stop reading as rays and
+/// collapse into a smudge at the small cuts.
 function sun(sq, u, cx, cy, r) {
   const el = (css) => { const d = document.createElement('div'); d.style.cssText = 'position:absolute;' + css; return d; };
-  sq.appendChild(el('left:' + (cx - r * 1.5) + '%;top:' + (cy - r * 1.5) + '%;'
-    + 'width:' + r * 3 + '%;height:' + r * 3 + '%;border-radius:50%;'
-    + 'background:rgba(255,205,100,.45);filter:blur(' + 18 * u + 'px);'));
+  // No glow behind this one. The paw carries a halo because a pale shape needs lifting
+  // off the graphite; the sun is already the brightest thing on the card, and a glow
+  // around it only filled the gaps between the rays — softening the exact detail that
+  // makes it read as a sun rather than a dot.
   const L = r * 0.62, W = r * 0.30, rr = r * 0.86;
   for (let i = 0; i < 8; i++) {
     const a = i * Math.PI / 4;
