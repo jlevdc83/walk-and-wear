@@ -976,3 +976,75 @@ body.bedside .w { aspect-ratio: auto; border-radius: 0; padding: 0; overflow: vi
   display: block; max-width: 100%;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+
+/* --- Liquid Glass, Apple's own values ------------------------------------
+   Lifted from the iOS 27 Sketch UI Kit's Materials page, which stores real fills
+   as JSON rather than the binary the .fig hid them in:
+
+     Over dark   Large UI  rgba(26,26,26,0.5)    Medium UI rgba(26,26,26,0.3)
+     Over light  Large UI  rgba(255,255,255,0.7) Medium UI rgba(204,204,204,0.7)
+     Highlights  white 0.1 -> 0.6      Separator rgba(0,0,0,0.12)
+
+   The correction that matters: over a dark background the material is a DARK
+   translucent fill, not a white tint. This used white at 12%, which is why the
+   night glass never looked quite right — and it is the dark-mode value I could
+   not measure off the simulator and left as an estimate.
+
+   Blur radius is still not in either kit, so 24px stays a judgement. */
+
+body { --glass-tint: rgba(26, 26, 26, .5); --glass-rim-low: rgba(255, 255, 255, .1); }
+body .w, body .card { --glass-contrast: 1; }
+
+body.phase-day, body.phase-dawn {
+  --glass-tint: rgba(255, 255, 255, .7);
+  --glass-rim-low: rgba(0, 0, 0, .12);      /* their separator value */
+  --glass-contrast: 1;
+}
+
+/* Small tiles take the Medium UI weight; large surfaces take Large UI. Apple
+   distinguishes the two and the lighter fill keeps a grid of small tiles from
+   reading as a wall. */
+.w-small { --glass-tint: rgba(26, 26, 26, .3); }
+body.phase-day .w-small, body.phase-dawn .w-small { --glass-tint: rgba(204, 204, 204, .7); }
+
+/* --- Apple system colours ------------------------------------------------
+   From the Sketch kit's shared swatches. The semantic colours were hand-picked
+   before; these are the real values, including the "Labels - Liquid Glass" set,
+   which is the label hierarchy specifically for type sitting on the material. */
+
+:root {
+  --sysGreen:  #30D158;   /* dark appearance */
+  --sysOrange: #FF9230;
+  --sysYellow: #FFD600;
+  --sysRed:    #FF4245;
+  --glassLabel1: #EDEDED; /* Labels - Liquid Glass / Dark */
+  --glassLabel2: #8A8A8A;
+}
+body.phase-day, body.phase-dawn {
+  --sysGreen:  #34C759;   /* light appearance */
+  --sysOrange: #FF8D28;
+  --sysYellow: #FFCC00;
+  --sysRed:    #FF383C;
+  --glassLabel1: #1A1A1A;
+  --glassLabel2: #727272;
+}
+
+body { --ink: var(--glassLabel1); --muted: var(--glassLabel2); }
+body.phase-day, body.phase-dawn { --ink: var(--glassLabel1); --muted: var(--glassLabel2); }
+
+/* Battery rings and the warning state. */
+.battCell.ok  .fill { stroke: var(--sysGreen); }
+.battCell.mid .fill { stroke: var(--sysYellow); }
+.battCell.low .fill { stroke: var(--sysRed); }
+.battCell.low .battPct { color: var(--sysRed); }
+.mini.warn { --glass-rim: var(--sysOrange); }
+.mini.warn .miniValue { color: var(--sysOrange); }
+.battRow.low { color: var(--sysOrange); }
+.widgetRow.lowBatt .widgetNote { color: var(--sysOrange); }
+
+/* The hourly outlook, on the same palette. */
+.hour.walk-ideal, .hour.walk-golden { background: var(--sysGreen); opacity: .95; }
+.hour.walk-warm  { background: var(--sysYellow); opacity: .9; }
+.hour.walk-paw   { background: var(--sysOrange); opacity: .95; }
+.hour.walk-cold  { background: #64D2FF; opacity: .9; }   /* system teal, dark */
+.hour.walk-rain-alert { background: #5E5CE6; opacity: .95; }  /* system indigo, dark */
