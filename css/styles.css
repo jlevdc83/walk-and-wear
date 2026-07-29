@@ -1048,3 +1048,17 @@ body.phase-day, body.phase-dawn { --ink: var(--glassLabel1); --muted: var(--glas
 .hour.walk-paw   { background: var(--sysOrange); opacity: .95; }
 .hour.walk-cold  { background: #64D2FF; opacity: .9; }   /* system teal, dark */
 .hour.walk-rain-alert { background: #5E5CE6; opacity: .95; }  /* system indigo, dark */
+
+/* --- Concentric radii ----------------------------------------------------
+   HIG, Live Activities: "match its corner radius to the outer corner radius by
+   subtracting the margin", so nested shapes sit concentrically inside the tile
+   instead of poking into its curve. Stated in this file's header from the start
+   and then never actually applied — the inner radii were picked by eye.
+
+   outer 21.5 - padding 16 = 5.5 */
+
+:root { --w-pad: 16px; --w-radius: 21.5px; --w-inner: calc(var(--w-radius) - var(--w-pad)); }
+.w { padding: var(--w-pad) calc(var(--w-pad) + 2px); border-radius: var(--w-radius); }
+.hour { border-radius: var(--w-inner); }
+.w .zipInput, .w .zipSubmit { border-radius: var(--w-inner); }
+.card .zipInput, .card .zipSubmit { border-radius: calc(26px - 20px); }  /* the locate card's own margin */
