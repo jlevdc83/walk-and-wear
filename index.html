@@ -89,6 +89,9 @@
         <!-- The next 10 hours at a glance, so a walk can be planned rather than
              just accepted or refused. -->
         <div class="outlook" id="outlook" aria-label="Walk conditions over the next ten hours"></div>
+        <!-- Filled when an hour is tapped. The strip is the densest thing on screen
+             and was the only part that couldn't explain itself. -->
+        <p class="hourDetail hidden" id="hourDetail" aria-live="polite"></p>
       </section>
 
       <div class="chips">
@@ -120,7 +123,7 @@
 
   </div>
 
-  <div class="buildMeta" id="buildMeta">v63</div>
+  <div class="buildMeta" id="buildMeta">v64</div>
 
   <script src="js/app.js"></script>
 </body>

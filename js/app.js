@@ -1,4 +1,4 @@
-const VERSION = "v63";
+const VERSION = "v64";
 const REFRESH_MS = 20 * 60 * 1000;
 const RETRY_MS = 60 * 1000;      // after a transient failure — not the full refresh interval
 const RUN_HOT = true;
@@ -424,6 +424,10 @@ function walkStateAt(h, i, now){
     state: decision.cls,
     label: decision.label,
     walkable: !decision.label.includes("Wait"),
+    // Carried so a tapped hour can explain itself rather than just being a colour.
+    feels: Math.round(feels),
+    rain: Math.round(h.precipitation_probability?.[i] ?? 0),
+    paw: risk.label,
   };
 }
 
@@ -465,16 +469,50 @@ function walkTiming(outlook){
   };
 }
 
+let lastOutlook = [];
+
 function renderOutlook(outlook){
   const el = $("outlook");
   if (!el) return;
+  lastOutlook = outlook;
   el.innerHTML = outlook.map((s, i) => {
     const hour = new Intl.DateTimeFormat([], { hour: "numeric" }).format(s.time);
     // Label every third hour; more than that is noise at this width.
     const tick = (i % 3 === 0) ? `<span class="tick">${hour}</span>` : "";
-    return `<div class="hour ${s.state}" title="${hour} — ${s.label}">${tick}</div>`;
+    // A button, not a div: the strip is the densest thing on screen and was the only
+    // part that couldn't explain itself. `title` is a desktop tooltip and does nothing
+    // under a finger.
+    return `<button class="hour ${s.state}" type="button" data-i="${i}"
+              aria-label="${hour}, ${s.label}">${tick}</button>`;
   }).join("");
 }
+
+/// Tap an hour to have it explain its colour. Bedside mode ignores this — nobody is
+/// interrogating a forecast from bed, and the aperture has no room for the answer.
+function showHourDetail(i){
+  const s = lastOutlook[i];
+  const el = $("hourDetail");
+  if (!s || !el) return;
+  const hour = new Intl.DateTimeFormat([], { hour: "numeric" }).format(s.time);
+  el.textContent = `${hour} · ${s.label.replace(/^\S+\s/, "")} · feels ${s.feels}° · ${s.rain}% rain · ${s.paw}`;
+  el.classList.remove("hidden");
+  document.querySelectorAll("#outlook .hour").forEach((b) =>
+    b.classList.toggle("picked", Number(b.dataset.i) === i)
+  );
+}
+
+function clearHourDetail(){
+  $("hourDetail")?.classList.add("hidden");
+  document.querySelectorAll("#outlook .hour.picked").forEach((b) => b.classList.remove("picked"));
+}
+
+$("outlook").addEventListener("click", (e) => {
+  const btn = e.target.closest(".hour");
+  if (!btn) return;
+  const i = Number(btn.dataset.i);
+  if (btn.classList.contains("picked")) clearHourDetail();
+  else showHourDetail(i);
+});
 
 function nextSunEvent(daily, now){
   const candidates = [];
@@ -916,11 +954,25 @@ if ("serviceWorker" in navigator) {
 // Bedside mode: masked to the enclosure aperture, reduced layout. A query param so it
 // can be tested from any browser; the Pi build serves it by default. ?bedside=flip
 // swaps the 4mm offset for the other landscape mounting.
+// Orientation is the context. The bedside phone is fixed landscape in the enclosure,
+// so landscape means "read from across the room": masked, glanceable, nothing to touch.
+// Portrait means it is in a hand — the full app, with detail on tap. Pick the bedside
+// phone up and turn it and you get the app; put it back and it is a clock again.
+//
+// Gated on ?bedside so rotating a phone you're holding never masks it: only the Pi
+// build (and explicit testing) opts in.
 const bedsideParam = new URLSearchParams(location.search).get("bedside");
-if (bedsideParam !== null) {
-  document.body.classList.add("bedside");
-  if (bedsideParam === "flip") document.body.classList.add("flip");
+if (bedsideParam === "flip") document.body.classList.add("flip");
+
+function applyBedsideMode(){
+  const landscape = window.innerWidth > window.innerHeight;
+  const on = bedsideParam !== null && landscape;
+  document.body.classList.toggle("bedside", on);
+  if (on) clearHourDetail();
 }
+applyBedsideMode();
+window.addEventListener("resize", applyBedsideMode);
+window.addEventListener("orientationchange", applyBedsideMode);
 
 renderVersionTag();
 updateClock();

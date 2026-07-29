@@ -270,6 +270,22 @@ body {
   display: flex;
   align-items: flex-end;
   justify-content: center;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.hour:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* The picked hour lifts rather than changing colour — the colour is the data. */
+.hour.picked { transform: scaleY(1.28); box-shadow: 0 0 0 1.5px var(--ink); }
+
+.hourDetail {
+  margin: 14px 0 0;
+  font-family: var(--mono);
+  font-size: .72rem;
+  color: var(--muted);
+  padding-top: 10px;
+  border-top: 1px solid var(--glass-rim-low);
 }
 .hour.walk-ideal, .hour.walk-golden { background: #6ee7b7; opacity: .9; }
 .hour.walk-warm                     { background: #fcd34d; opacity: .85; }
@@ -581,6 +597,8 @@ body.bedside .cardLabel { display: none; }
 body.bedside .verdict { font-size: 17cqh; margin: 0; line-height: 1; }
 body.bedside .support { font-size: 8cqh; margin-top: .35em; }
 body.bedside .aside { display: none; }
+body.bedside .hourDetail { display: none; }
+body.bedside .hour { cursor: default; }
 body.bedside .outlook { margin-top: 0; padding-top: 3cqh; padding-bottom: 5cqh; gap: 5px; }
 body.bedside .hour { height: 7cqh; border-radius: 3px; }
 body.bedside .hour .tick { bottom: -4.6cqh; font-size: 3.4cqh; }
