@@ -1,4 +1,4 @@
-const VERSION = "v60";
+const VERSION = "v61";
 const REFRESH_MS = 20 * 60 * 1000;
 const RETRY_MS = 60 * 1000;      // after a transient failure — not the full refresh interval
 const RUN_HOT = true;
@@ -760,10 +760,15 @@ $("zipMeta").addEventListener("click", openLocate);
    fine strokes are lost first. So the dim state gets *heavier* type, not thinner —
    the opposite of the usual instinct. */
 
-const DIM_AFTER_MS = 60 * 1000;   // idle time before dimming, night + always-on only
+// Two idle tiers rather than a configured bedtime. A fixed hour is a setting to get
+// wrong and a knob to maintain; idleness already carries the signal — if you are still
+// looking at it, it stays lit, and if you have gone to sleep it goes dark on its own.
+const DIM_AFTER_MS      = 60 * 1000;        // warm amber
+const NEAR_OFF_AFTER_MS = 5 * 60 * 1000;    // as dark as a web page can go
 
 let wakeLock = null;
 let dimTimer = null;
+let nearOffTimer = null;
 let keepAwake = localStorage.getItem("dashboard_keepAwake") === "true";
 
 function wakeLockSupported(){
@@ -810,10 +815,18 @@ function dim(){
   document.body.classList.add("dimmed");
 }
 
+function nearOff(){
+  if (!keepAwake || !isNightPhase()) return;
+  document.body.classList.add("dimmed", "nearOff");
+}
+
 function undim(){
-  document.body.classList.remove("dimmed");
+  document.body.classList.remove("dimmed", "nearOff");
   clearTimeout(dimTimer);
-  if (keepAwake) dimTimer = setTimeout(dim, DIM_AFTER_MS);
+  clearTimeout(nearOffTimer);
+  if (!keepAwake) return;
+  dimTimer = setTimeout(dim, DIM_AFTER_MS);
+  nearOffTimer = setTimeout(nearOff, NEAR_OFF_AFTER_MS);
 }
 
 $("awakeBtn").addEventListener("click", async () => {

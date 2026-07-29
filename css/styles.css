@@ -507,6 +507,36 @@ body.dimmed .weather .stats { opacity: .35; }   /* detail recedes; verdicts stay
 body.dimmed .awakeBtn { opacity: .4; }
 body, body * { transition: color .8s ease, opacity .8s ease, background-color .8s ease; }
 
+/* --- Near-off ------------------------------------------------------------
+   As dark as a web page is allowed to get. On OLED true black means the pixels
+   are simply off, so this is close to a dark screen; on an LCD the backlight
+   stays lit no matter what is drawn, which is a hardware fact no CSS reaches.
+   To actually drop an LCD backlight you need the iOS Shortcuts "Set Brightness"
+   action in the scene — no app, web or native, has that lever.
+
+   Only the time survives, dim red: it reads at a glance without re-adapting
+   your eyes, and it is the one thing worth waking up to look at. */
+
+body.nearOff { background: #000; }
+/* display:none, not opacity:0 — at zero opacity these still occupied the layout,
+   which pinned the clock to the top-left instead of centring it. */
+body.nearOff .sky,
+body.nearOff .decisions,
+body.nearOff .weather,
+body.nearOff .barMeta,
+body.nearOff .awakeBtn,
+body.nearOff .buildMeta { display: none; }
+body.nearOff .app { justify-content: center; align-items: center; }
+body.nearOff .bar { justify-content: center; width: 100%; }
+body.nearOff .clock {
+  color: #7d2114;
+  font-size: clamp(2.4rem, 13vw, 4rem);
+  font-weight: 700;          /* heavier again — the same rule holds all the way down */
+  white-space: nowrap;       /* "8:06 PM" was wrapping onto two lines */
+  text-shadow: none;
+  transition: color .8s ease, font-size .8s ease;
+}
+
 /* --- Accessibility ------------------------------------------------------
    Apple requires the material to stand down for these. Translucency is the
    first thing to go; the layout and hierarchy stay identical. */
