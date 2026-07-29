@@ -1037,10 +1037,18 @@ body.phase-day, body.phase-dawn {
 }
 
 /* Small tiles take the Medium UI weight; large surfaces take Large UI. Apple
-   distinguishes the two and the lighter fill keeps a grid of small tiles from
-   reading as a wall. */
+   distinguishes the two, and the thinner fill keeps a grid of small tiles from
+   reading as a wall.
+
+   Thinner means *less of the same tint*, not a different colour. The day value used
+   to be rgba(204,204,204,.7), which made every small tile visibly grey next to the
+   white large ones. That grey traces back to the Sketch kit, where the widget's
+   "Glass" layer is an opaque rgb(216,216,216) — but it sits over the kit's own
+   purple sample wallpaper, so it is a flattened composite of glass-over-that-photo,
+   not a tint meant to be laid over a different background. Over our gradient it just
+   reads as dirt. The dark phase already had this right: same hue, lower alpha. */
 .w-small { --glass-tint: rgba(26, 26, 26, .3); }
-body.phase-day .w-small, body.phase-dawn .w-small { --glass-tint: rgba(204, 204, 204, .7); }
+body.phase-day .w-small, body.phase-dawn .w-small { --glass-tint: rgba(255, 255, 255, .5); }
 
 /* --- Apple system colours ------------------------------------------------
    From the Sketch kit's shared swatches. The semantic colours were hand-picked
