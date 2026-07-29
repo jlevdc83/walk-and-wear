@@ -134,6 +134,39 @@
       </p>
     </section>
 
+    <!-- Indoor sensors -------------------------------------------------- -->
+    <section class="card glass adminCard">
+      <h2 class="cardLabel">Indoor sensors</h2>
+      <p class="adminNote" id="sensorNote">—</p>
+      <label class="row">
+        <span class="rowLabel">Air quality<em>Which device feeds the indoor air widget</em></span>
+        <select id="airSensorPick"></select>
+      </label>
+      <label class="row">
+        <span class="rowLabel">Humidity<em>Which device feeds the indoor humidity widget</em></span>
+        <select id="humSensorPick"></select>
+      </label>
+      <label class="row">
+        <span class="rowLabel">Humidity target<em>Percent. The widget says which side of it you are on.</em></span>
+        <input type="number" min="20" max="80" step="5" data-set="humidityTarget">
+      </label>
+    </section>
+
+    <!-- Batteries ------------------------------------------------------ -->
+    <section class="card glass adminCard">
+      <h2 class="cardLabel">Batteries</h2>
+      <p class="adminNote" id="battNote">—</p>
+      <label class="row">
+        <span class="rowLabel">Low at or under<em>Percent. A device also counts as low if it sets its own flag.</em></span>
+        <input type="number" min="5" max="60" step="5" data-set="battThreshold">
+      </label>
+      <ul class="widgetList battList" id="battList"></ul>
+      <p class="adminActions">
+        <button class="linkBtn" type="button" id="battAll">Watch all</button>
+        <button class="linkBtn" type="button" id="battNone">Watch none</button>
+      </p>
+    </section>
+
     <!-- Data ---------------------------------------------------------- -->
     <section class="card glass adminCard">
       <h2 class="cardLabel">Data</h2>

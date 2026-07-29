@@ -26,6 +26,15 @@ const SETTING_DEFAULTS = {
   peekSec: 30,            // how long a long-press reveal lasts
   keepAwakeDefault: false,
 
+  // Which sensor feeds each indoor widget. Empty means "whichever is first", which
+  // is only safe while there is exactly one of each.
+  airSensor: "",
+  humiditySensor: "",
+  humidityTarget: 60,     // Josh's stated target; the widget says which side of it you are on
+
+  // Batteries
+  battThreshold: 20,      // percent at or under which a device counts as low
+
   // Bedside aperture, in mm. Defaults match build_integrated_frame.py.
   maskW: 124,
   maskH: 58,
@@ -36,6 +45,42 @@ const SETTING_DEFAULTS = {
 // iPhone 11 active display, landscape. Locked — see the handoff's rule about not
 // re-deriving manufacturer dimensions from photographs.
 const DISPLAY_MM = { w: 139.62, h: 64.51 };
+
+// Which battery devices to watch. Three states, not two: absent means "all", which
+// is what you want before anything has been chosen, and an empty array means "none".
+// Collapsing those two onto `[]` left no way to say none — "watch none" then reported
+// "watching 1 of 7", because it was storing a sentinel.
+const BATT_WATCH_KEY = "ww_battWatch";
+const BATT_ROSTER_KEY = "ww_battRoster";
+const SENSOR_ROSTER_KEY = "ww_sensorRoster";
+
+function loadSensorRoster(){
+  try { return JSON.parse(localStorage.getItem(SENSOR_ROSTER_KEY) || '{"air":[],"humidity":[]}'); }
+  catch { return { air: [], humidity: [] }; }
+}
+function saveSensorRoster(r){
+  try { localStorage.setItem(SENSOR_ROSTER_KEY, JSON.stringify(r)); } catch { /* private mode */ }
+}
+
+function loadBattWatch(){
+  const raw = localStorage.getItem(BATT_WATCH_KEY);
+  if (raw === null) return null;                     // absent = watch all
+  try { const v = JSON.parse(raw); return Array.isArray(v) ? v : null; } catch { return null; }
+}
+function saveBattWatch(list){
+  try {
+    if (list === null) localStorage.removeItem(BATT_WATCH_KEY);
+    else localStorage.setItem(BATT_WATCH_KEY, JSON.stringify(list));
+  } catch { /* private mode */ }
+}
+// Cached on every successful Pi poll, so the admin page can offer the list even when
+// it is being read from GitHub Pages, where /api/home does not exist.
+function loadBattRoster(){
+  try { return JSON.parse(localStorage.getItem(BATT_ROSTER_KEY) || "[]"); } catch { return []; }
+}
+function saveBattRoster(list){
+  try { localStorage.setItem(BATT_ROSTER_KEY, JSON.stringify(list)); } catch { /* private mode */ }
+}
 
 function loadSettings(){
   try {

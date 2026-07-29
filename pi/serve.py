@@ -111,7 +111,7 @@ def home_state():
         if _cache["payload"] is not None and (time.time() - _cache["at"]) < CACHE_TTL:
             return _cache["payload"]
     try:
-        alarm, locks, humidity, air, low = None, [], None, None, []
+        alarm, locks, humidity, air, low = None, [], [], [], []
         for room in _get("/api/accessories"):
             for a in room.get("accessories", []):
                 name, typ = a.get("name"), a.get("type")
@@ -123,24 +123,30 @@ def home_state():
                 if typ == "lock":
                     locks.append({"name": name,
                                   "state": LOCK_STATE.get(ch.get("lock_current_state"), "unknown")})
-                if "current_relative_humidity" in ch and humidity is None:
-                    humidity = {"name": name, "value": ch["current_relative_humidity"]}
-                if "air_quality" in ch and air is None:
-                    air = {"name": name,
-                           "quality": AIR_QUALITY.get(ch["air_quality"], "unknown"),
-                           "pm25": ch.get("pm_t_density")}
+                # All of them. Taking the first the tree yielded made which purifier
+                # won arbitrary the moment a second one existed.
+                if "current_relative_humidity" in ch:
+                    humidity.append({"name": name, "value": ch["current_relative_humidity"]})
+                if "air_quality" in ch:
+                    air.append({"name": name,
+                                "quality": AIR_QUALITY.get(ch["air_quality"], "unknown"),
+                                "pm25": ch.get("pm_t_density")})
 
+                # Every battery-bearing device, not just the flat ones — the client
+                # decides which it cares about and at what level, and it cannot offer
+                # that choice over a list it has never seen.
                 lvl = ch.get("battery_level")
-                if ch.get("status_low_battery") == 1 or (isinstance(lvl, (int, float)) and lvl <= 20):
-                    low.append({"name": name, "level": lvl})
+                if lvl is not None or "status_low_battery" in ch:
+                    low.append({"name": name, "type": typ, "level": lvl,
+                                "flag": ch.get("status_low_battery") == 1})
 
         payload = {
             "ok": True, "at": time.time(),
             "state": alarm or "no alarm found",   # kept for the dimming logic
             "locks": locks,
             "humidity": humidity,
-            "air": air,
-            "lowBatteries": sorted(low, key=lambda b: (b["level"] is None, b["level"])),
+            "air": air,   # arrays; the client picks
+            "batteries": sorted(low, key=lambda b: (b["level"] is None, b["level"])),
         }
     except Exception as exc:  # noqa: BLE001
         payload = {"ok": False, "state": "unknown", "error": str(exc)[:160], "at": time.time()}

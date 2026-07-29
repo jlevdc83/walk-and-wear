@@ -1,4 +1,4 @@
-const VERSION = "v70";
+const VERSION = "v71";
 const RETRY_MS = 60 * 1000;      // after a transient failure — not the full refresh interval
 
 // Everything tunable now lives in js/config.js and is edited on admin.html.
@@ -775,17 +775,35 @@ function renderHomeMinis(home){
   const lock = (home.locks || [])[0];
   setMini("lock", lock ? lock.state : "—", lock ? lock.name : "no lock found");
 
-  setMini("inAir", home.air ? home.air.quality : "—",
-    home.air && home.air.pm25 != null ? `PM2.5 ${home.air.pm25}` : (home.air ? home.air.name : ""));
+  // Both are arrays now. Cache the roster so the admin can offer the choice, and
+  // honour the chosen sensor rather than whichever HOOBS listed first.
+  const airs = home.air || [], hums = home.humidity || [];
+  if (airs.length || hums.length) {
+    saveSensorRoster({ air: airs.map((x) => x.name), humidity: hums.map((x) => x.name) });
+  }
+  const pick = (list, name) => list.find((x) => x.name === name) || list[0] || null;
 
-  const hum = home.humidity;
-  // 60% is Josh's stated target; say which side of it we are on, not just the number.
+  const air = pick(airs, S.airSensor);
+  setMini("inAir", air ? air.quality : "—",
+    air ? (air.pm25 != null ? `${air.name} · PM2.5 ${air.pm25}` : air.name) : "no sensor");
+
+  const hum = pick(hums, S.humiditySensor);
+  const target = S.humidityTarget;
   setMini("inHum", hum ? `${Math.round(hum.value)}%` : "—",
-    hum ? (hum.value < 60 ? `below the 60% target` : `at or above 60%`) : "");
+    hum ? `${hum.value < target ? "below" : "at or above"} the ${target}% target` : "no sensor");
 
-  const low = home.lowBatteries || [];
+  // The roster is cached so the admin page can offer the choice from anywhere.
+  const all = home.batteries || [];
+  if (all.length) saveBattRoster(all.map((b) => b.name));
+
+  const watch = loadBattWatch();
+  const watched = watch === null ? all : all.filter((b) => watch.includes(b.name));
+  const low = watched.filter((b) => b.flag || (typeof b.level === "number" && b.level <= S.battThreshold));
+
   setMini("batt", low.length ? `${low.length} low` : "all good",
-    low.length ? low.slice(0, 2).map((b) => `${b.name} ${b.level ?? "?"}%`).join(" · ") : "18 devices reporting");
+    low.length
+      ? low.slice(0, 2).map((b) => `${b.name} ${b.level ?? "?"}%`).join(" · ")
+      : `${watched.length} watched`);
 }
 
 function timingPhrase(timing){

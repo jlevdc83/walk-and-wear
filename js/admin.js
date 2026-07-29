@@ -174,6 +174,85 @@ document.addEventListener("pointermove", (e) => {
   })
 );
 
+/* --- Indoor sensors ------------------------------------------------------- */
+
+function renderSensors(){
+  const roster = loadSensorRoster();
+  const note = document.getElementById("sensorNote");
+  const total = roster.air.length + roster.humidity.length;
+  note.textContent = total
+    ? `${roster.air.length} air, ${roster.humidity.length} humidity. There is no indoor temperature — nothing in HOOBS reports one.`
+    : "No sensor list yet. Open the app on the Pi build once and it will appear here.";
+
+  const fill = (el, names, chosen) => {
+    el.innerHTML = ['<option value="">First available</option>']
+      .concat(names.map((n) => `<option value="${n.replace(/"/g, "&quot;")}"${n === chosen ? " selected" : ""}>${n}</option>`))
+      .join("");
+    el.disabled = names.length === 0;
+  };
+  fill(document.getElementById("airSensorPick"), roster.air, S.airSensor);
+  fill(document.getElementById("humSensorPick"), roster.humidity, S.humiditySensor);
+}
+
+[["airSensorPick", "airSensor"], ["humSensorPick", "humiditySensor"]].forEach(([elId, key]) => {
+  document.getElementById(elId).addEventListener("change", (e) => {
+    S[key] = e.target.value;
+    saveSettings(S); flash();
+  });
+});
+
+/* --- Batteries ------------------------------------------------------------
+   The roster is whatever the app last saw from the Pi. Offering the choice from a
+   cached list means it works on the public admin page too, where /api/home is a 404. */
+
+function renderBatteries(){
+  const roster = loadBattRoster();
+  const watch = loadBattWatch();
+  const note = document.getElementById("battNote");
+  const ul = document.getElementById("battList");
+
+  if (!roster.length) {
+    note.textContent = "No device list yet. Open the app on the Pi build once and it will appear here.";
+    ul.innerHTML = "";
+    return;
+  }
+  note.textContent =
+    watch === null ? `Watching all ${roster.length}. Untick any you don't care about.`
+    : watch.length === 0 ? `Watching none — the widget will stay quiet.`
+    : `Watching ${watch.length} of ${roster.length}.`;
+
+  ul.innerHTML = roster.map((name) => {
+    const on = watch === null || watch.includes(name);
+    return `<li class="widgetRow${on ? "" : " off"}">
+      <label class="widgetPick">
+        <input type="checkbox" ${on ? "checked" : ""} data-batt="${name.replace(/"/g, "&quot;")}">
+        <span class="widgetName">${name}</span>
+      </label>
+    </li>`;
+  }).join("");
+}
+
+document.addEventListener("change", (e) => {
+  const cb = e.target.closest("input[data-batt]");
+  if (!cb) return;
+  const roster = loadBattRoster();
+  // An empty watch list means "all", so the first unticked box has to be expanded
+  // into an explicit list or it would read as "watch nothing".
+  let watch = loadBattWatch();
+  if (watch === null) watch = [...roster];   // expand "all" before removing one from it
+  const name = cb.dataset.batt;
+  watch = cb.checked ? [...new Set([...watch, name])] : watch.filter((n) => n !== name);
+  saveBattWatch(watch);
+  renderBatteries(); flash();
+});
+
+document.getElementById("battAll").addEventListener("click", () => {
+  saveBattWatch(null); renderBatteries(); flash("Watching all");
+});
+document.getElementById("battNone").addEventListener("click", () => {
+  saveBattWatch([]); renderBatteries(); flash("Watching none");
+});
+
 /* --- Data ----------------------------------------------------------------- */
 
 function describeData(){
@@ -203,11 +282,11 @@ document.getElementById("clearLocation").addEventListener("click", () => {
 
 document.getElementById("resetAll").addEventListener("click", () => {
   if (!confirm("Reset every setting, the widget layout, and the saved location?")) return;
-  [SETTINGS_KEY, LAYOUT_KEY, "dashboard_zip", "dashboard_place",
+  [SETTINGS_KEY, LAYOUT_KEY, BATT_WATCH_KEY, "dashboard_zip", "dashboard_place",
    "dashboard_snapshot", "dashboard_keepAwake"].forEach((k) => localStorage.removeItem(k));
   S = loadSettings();
   layout = loadLayout();
-  bindFields(); renderLists(); applyMaskVars(S); renderMask(); describeData();
+  bindFields(); renderLists(); applyMaskVars(S); renderMask(); describeData(); renderBatteries(); renderSensors();
   flash("Reset");
 });
 
@@ -216,6 +295,8 @@ renderLists();
 applyMaskVars(S);
 renderMask();
 describeData();
+renderBatteries();
+renderSensors();
 // Materialise the current layout on open. Until something is changed it exists only
 // as defaults in memory, so nothing has actually been written down — which makes the
 // stored state a surprise rather than a record.
