@@ -1,4 +1,4 @@
-const VERSION = "v76";
+const VERSION = "v77";
 const RETRY_MS = 60 * 1000;      // after a transient failure — not the full refresh interval
 
 // Everything tunable now lives in js/config.js and is edited on admin.html.
@@ -825,26 +825,21 @@ function renderHomeMinis(home){
     low.length ? `${low.length} low` : (watched.length ? "all good" : "none watched"),
     rows.length > 4 ? `+${rows.length - 4} more watched` : `${watched.length} watched`);
 
-  // Ring gauges, the way iOS shows batteries: a dial per device with the level under
-  // it. Colour carries the state, so a glance lands before any name is read.
   const list = $("battRows");
   if (list) {
-    const R = 26, C = 2 * Math.PI * R;
-    list.innerHTML = shown.map((b) => {
-      const lvl = typeof b.level === "number" ? Math.round(b.level) : null;
-      const frac = lvl == null ? 0 : Math.max(0, Math.min(1, lvl / 100));
-      const tone = isLow(b) ? "low" : lvl != null && lvl <= 50 ? "mid" : "ok";
-      return `<span class="battCell ${tone}${devMatches(b, S.battPrimary) ? " pinned" : ""}" title="${b.name} (${b.type})">
-        <svg class="battRing" viewBox="0 0 64 64" aria-hidden="true">
-          <circle class="track" cx="32" cy="32" r="${R}"></circle>
-          <circle class="fill" cx="32" cy="32" r="${R}"
-                  stroke-dasharray="${(C * frac).toFixed(1)} ${C.toFixed(1)}"></circle>
-        </svg>
-        <span class="battPct">${lvl == null ? "?" : lvl + "%"}</span>
-        <span class="battName">${b.name}</span>
-      </span>`;
-    }).join("");
+    list.className = `battRows mode-${S.battDisplay}`;
+    list.innerHTML = renderBatteryBody(S.battDisplay, shown, isLow);
   }
+  // The tile takes the size its chosen display actually needs. A one-line summary
+  // in a large tile is the whitespace problem this widget was meant to fix.
+  if (card) {
+    const size = S.battDisplay === "compact" ? "w-small"
+      : S.battDisplay === "dials" ? "w-medium"
+      : "w-large";
+    card.classList.remove("w-small", "w-medium", "w-large");
+    card.classList.add(size);
+  }
+
 }
 
 function timingPhrase(timing){
@@ -859,6 +854,52 @@ function timingPhrase(timing){
     case "none":  return `Nothing good for ${OUTLOOK_HOURS}h`;
     default:      return "";   // "open" — good throughout, no cliff to warn about
   }
+}
+
+/// Four ways to draw the same data. Dials read fastest for a handful; a list stays
+/// legible when many are watched; bars make levels comparable; compact gives it up
+/// altogether and just says whether anything needs attention.
+function renderBatteryBody(mode, devices, isLow){
+  const pct = (b) => (typeof b.level === "number" ? Math.round(b.level) : null);
+  const tone = (b) => isLow(b) ? "low" : (pct(b) != null && pct(b) <= 50 ? "mid" : "ok");
+  const pin = (b) => devMatches(b, S.battPrimary) ? " pinned" : "";
+
+  if (mode === "compact") {
+    const low = devices.filter(isLow);
+    const worst = [...devices].sort((x, y) => (pct(x) ?? 101) - (pct(y) ?? 101))[0];
+    return `<span class="battCompact${low.length ? " low" : ""}">${
+      low.length ? `${low.length} need${low.length === 1 ? "s" : ""} replacing` : "All healthy"
+    }${worst ? ` · lowest ${worst.name} ${pct(worst) ?? "?"}%` : ""}</span>`;
+  }
+
+  if (mode === "bars") {
+    return devices.map((b) => `<span class="battBar ${tone(b)}${pin(b)}">
+      <span class="battName">${b.name}</span>
+      <span class="battTrack"><span class="battFill" style="width:${pct(b) ?? 0}%"></span></span>
+      <span class="battPct">${pct(b) == null ? "?" : pct(b) + "%"}</span>
+    </span>`).join("");
+  }
+
+  if (mode === "list") {
+    return devices.map((b) => `<span class="battLine ${tone(b)}${pin(b)}">
+      <span class="battName">${b.name}</span>
+      <span class="battPct">${pct(b) == null ? "?" : pct(b) + "%"}</span>
+    </span>`).join("");
+  }
+
+  // dials
+  const R = 26, C = 2 * Math.PI * R;
+  return devices.map((b) => {
+    const frac = pct(b) == null ? 0 : Math.max(0, Math.min(1, pct(b) / 100));
+    return `<span class="battCell ${tone(b)}${pin(b)}" title="${b.name} (${b.type})">
+      <svg class="battRing" viewBox="0 0 64 64" aria-hidden="true">
+        <circle class="track" cx="32" cy="32" r="${R}"></circle>
+        <circle class="fill" cx="32" cy="32" r="${R}" stroke-dasharray="${(C*frac).toFixed(1)} ${C.toFixed(1)}"></circle>
+      </svg>
+      <span class="battPct">${pct(b) == null ? "?" : pct(b) + "%"}</span>
+      <span class="battName">${b.name}</span>
+    </span>`;
+  }).join("");
 }
 
 /* --- Snapshot cache ---------------------------------------------------- */
@@ -1208,6 +1249,10 @@ function applyBedsideMode(){
   const landscape = window.innerWidth > window.innerHeight;
   const on = bedsideParam !== null && landscape && !peeking;
   document.body.classList.toggle("bedside", on);
+  // The aperture mask is now opt-in with ?bedside=mask. The enclosure is still
+  // being decided, so the widget screen should not be built around a hole whose
+  // size may change — it lays out at whatever size it is given.
+  document.body.classList.toggle("masked", on && bedsideParam === "mask");
   if (on) clearHourDetail();
   applyLayout();   // the two contexts have different widget sets
 }

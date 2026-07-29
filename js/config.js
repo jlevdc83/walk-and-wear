@@ -43,7 +43,13 @@ const SETTING_DEFAULTS = {
   // worst-first, which is exactly backwards for the one battery whose death locks
   // you out. Keyed name|type, because names are NOT unique — there is a "Front Door"
   // lock and a "Front Door" contact sensor, and pinning by name matched both.
-  battPrimary: "Front Door|lock",      // percent at or under which a device counts as low
+  battPrimary: "Front Door|lock",
+  // How the battery widget draws itself:
+  //   dials   — ring gauges, one per device (iOS-like, best for a few)
+  //   list    — name and level per row, most legible, scales to many
+  //   bars    — horizontal meters, compact and comparable at a glance
+  //   compact — a single line: how many are low and which is worst
+  battDisplay: "dials",      // percent at or under which a device counts as low
 
   // Bedside aperture, in mm. Defaults match build_integrated_frame.py.
   maskW: 124,

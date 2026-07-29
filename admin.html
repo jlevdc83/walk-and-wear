@@ -175,6 +175,15 @@
         <input type="number" min="5" max="60" step="5" data-set="battThreshold">
       </label>
       <label class="row">
+        <span class="rowLabel">Display as<em>Dials read fastest for a few; a list stays legible for many</em></span>
+        <select data-set="battDisplay">
+          <option value="dials">Dials</option>
+          <option value="list">List</option>
+          <option value="bars">Bars</option>
+          <option value="compact">One line</option>
+        </select>
+      </label>
+      <label class="row">
         <span class="rowLabel">Always show first<em>Shown whatever its level — for the one whose death locks you out</em></span>
         <select id="battPrimaryPick"></select>
       </label>

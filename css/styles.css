@@ -606,7 +606,7 @@ body.bedside.flip { --mask-shift: -2.87%; }
 body.bedside { background: #000; overflow: hidden; }
 body.bedside .sky { display: none; }
 
-body.bedside .app {
+body.bedside.masked .app {
   position: fixed;
   top: 50%;
   left: 50%;
@@ -1166,3 +1166,79 @@ body.bedside .miniValue, body.bedside .chipValue {
   overflow-wrap: anywhere;
 }
 body.bedside .verdict { overflow-wrap: anywhere; }
+
+/* --- Height follows content ----------------------------------------------
+   Apple's tiles are fixed ratios because the Home Screen is a fixed grid. A web
+   page has no such constraint, and forcing the ratio left small tiles like
+   "Front door / locked" as a 174px square holding two lines — mostly emptiness.
+
+   The ratio becomes a floor instead of a law: tiles keep the Apple proportions as
+   a minimum and grow only if their content needs it. Rows stretch, so neighbours
+   still line up and the grid does not go ragged. */
+
+.w-small, .w-medium, .w-large { aspect-ratio: auto; height: auto; }
+.w-small  { min-height: 118px; }
+.w-medium { min-height: 118px; }
+.w-large  { min-height: 200px; }
+.wgrid { align-items: stretch; grid-auto-rows: min-content; }
+.wgrid > .w { height: 100%; }
+
+/* Content sits from the top and only the last element pushes to the floor, so a
+   short tile is compact rather than stretched around a void. */
+.w > .cardLabel, .w > .miniLabel, .w > .chipLabel { margin: 0 0 8px; }
+.w > .miniValue, .w > .chipValue { margin-top: 4px; }
+.w .verdict { margin-top: 0; }
+.w-large .outlook, .w-large .battRows { margin-top: auto; }
+
+/* --- Breakpoints ---------------------------------------------------------
+   Every major width, not just phone and desktop. Column count changes; the tiles
+   themselves keep their proportions. */
+
+@media (max-width: 359px) {                      /* iPhone SE and narrower */
+  .wgrid { gap: 10px; }
+  .w { padding: 13px 14px; }
+  .w-small { min-height: 104px; }
+}
+@media (min-width: 360px) and (max-width: 699px) { .wgrid { grid-template-columns: repeat(2, 1fr); } }
+@media (min-width: 700px) and (max-width: 1023px) { .wgrid { grid-template-columns: repeat(4, 1fr); } }
+@media (min-width: 1024px) and (max-width: 1439px) { .wgrid { grid-template-columns: repeat(6, 1fr); } }
+@media (min-width: 1440px) {
+  .wgrid { grid-template-columns: repeat(8, 1fr); }
+  .app { max-width: 1500px; }
+}
+/* Landscape phones: short and wide, so cap tile height rather than let one tile
+   push the fold. */
+@media (orientation: landscape) and (max-height: 500px) and (min-width: 700px) {
+  .w-large { min-height: 150px; }
+  .w-small, .w-medium { min-height: 96px; }
+}
+
+/* --- Battery display modes ----------------------------------------------- */
+
+.battRows.mode-dials { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.battRows.mode-list, .battRows.mode-bars { display: flex; flex-direction: column; gap: 6px; }
+.battRows.mode-compact { display: block; }
+
+/* List: name and level, the most legible at any count. */
+.battLine { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; }
+.battLine .battName { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.battLine.low .battPct, .battLine.low .battName { color: var(--sysOrange); }
+
+/* Bars: a meter each, so levels are comparable without reading numbers. */
+.battBar { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; align-items: center; }
+.battBar .battName { grid-column: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.battBar .battPct { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
+.battTrack {
+  grid-column: 1; height: 6px; border-radius: 3px;
+  background: var(--glass-rim-low); overflow: hidden;
+}
+.battFill { display: block; height: 100%; border-radius: inherit; background: var(--sysGreen); transition: width .6s ease; }
+.battBar.mid .battFill { background: var(--sysYellow); }
+.battBar.low .battFill { background: var(--sysRed); }
+.battBar.low .battPct { color: var(--sysOrange); }
+
+/* One line: gives up the detail and answers only "is anything wrong". */
+.battCompact { font-size: .95rem; font-weight: 600; }
+.battCompact.low { color: var(--sysOrange); }
+
+.battLine.pinned .battName::before, .battBar.pinned .battName::before { content: "◆ "; opacity: .6; }
