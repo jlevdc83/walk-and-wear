@@ -46,6 +46,7 @@ const SETTING_DEFAULTS = {
   //   spark  line with markers     text    a plain sentence
   //   density solid vs faint       ladder  a vertical list of hours
   walkDisplay: "icons",
+  vizStyle: "auto",
 
   // Batteries
   // Devices excluded regardless of the watch list — hardware that exists in HOOBS
@@ -180,6 +181,18 @@ const WIDGETS = [
   { id: "indoorhum",  label: "Indoor humidity (Pi)", note: "Against the 60% target" },
   { id: "batteries",  label: "Batteries (Pi)",  note: "Anything low or flat — 18 devices report" },
 ];
+
+/// Open-Meteo's pollen is the CAMS *European* dataset, so every count is null
+/// outside its domain — verified: Berlin returns values, Washington returns nulls.
+/// Roughly the published CAMS Europe grid. Used to drop the widget where it can
+/// never say anything, rather than leaving a tile that reads as broken forever.
+function pollenCovered(lat, lon){
+  if (typeof lat !== "number" || typeof lon !== "number") return true;  // unknown: don't hide
+  return lat >= 30 && lat <= 72 && lon >= -25 && lon <= 45;
+}
+
+/// Cached so the admin page can explain the absence without a network call.
+const POLLEN_KEY = "ww_pollen_covered";
 
 const LAYOUT_KEY = "dashboard_layout";
 const DEFAULT_LAYOUT = {
@@ -467,3 +480,26 @@ const AQI_BANDS = [
 ];
 const AIR_STEPS = ["poor", "inferior", "fair", "good", "excellent"];
 const POLLEN_STEPS = ["none", "low", "moderate", "high", "very high"];
+
+
+/// A plain bar, for the `bars` widget-graphic style: every scalar rendered the same
+/// way, which stays legible at heights where a dial's arc collapses — the bedside
+/// slot in particular.
+function vizBar(frac, tone, marker){
+  const f = frac == null ? null : Math.max(0, Math.min(1, frac));
+  const m = marker == null ? null : Math.max(0, Math.min(1, marker));
+  return `<span class="viz vizBarWrap ${tone || ""}">
+    <span class="bTrack">
+      ${f == null ? "" : `<span class="bFill" style="width:${(f * 100).toFixed(1)}%"></span>`}
+      ${m == null ? "" : `<span class="bMark" style="left:${(m * 100).toFixed(1)}%"></span>`}
+    </span>
+  </span>`;
+}
+
+/// Route a widget's graphic through the chosen style. `auto` gives each the shape
+/// that suits its data; `bars` makes them uniform and short; `off` drops them.
+function vizPick(style, shapes){
+  if (style === "off") return "";
+  if (style === "bars" && shapes.bars !== undefined) return shapes.bars;
+  return shapes.auto;
+}

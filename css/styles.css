@@ -48,7 +48,16 @@
 
      CSS reproduces that as contrast() on the backdrop plus a white overlay:
      c(1-a) = 0.238 with a = .6, c = .6 fits the measured line closely. */
-  --glass-blur: 24px;
+  /* 6px, not the 24px this was guessed at. Measured from the iOS 27 Sketch kit:
+     Liquid Glass is blur type 4 (isCustomGlass), and all seven Home Screen widget
+     masters — iPhone Small/Medium/Large/XL and iPad Small/Medium/Large — carry
+     radius 3 at the kit's 1x, uniformly. The Materials artboard's own glass sits at
+     radius 6. Doubling 3 for the CSS/native convention lands on the same number.
+     It costs nothing visually here (our backdrop is a smooth gradient, so there is
+     little for a blur to act on) and it is real GPU work saved on a display that
+     stays on all night. Saturation stays at 180%: the kit's materials pair radius 6
+     with saturation 1 and 2, and 2 is the one that matches what we have. */
+  --glass-blur: 6px;
   --glass-sat: 180%;
   --glass-contrast: 1;          /* Clear-like by default */
   --glass-tint: rgba(255, 255, 255, .12);
@@ -646,6 +655,13 @@ body.bedside .awakeBtn,
 body.bedside .buildMeta,
 body.bedside .updated { display: none; }
 
+/* ...except the temperature inside the weather tile. Dropping .ambient with the
+   rest left that widget an empty shell — a 20px sliver of glass at the end of the
+   row with nothing in it, which is what the stray white edge on the bedside render
+   was. The stats strip stays dropped; it cannot earn the room. */
+body.bedside .weather .ambient { display: flex; }
+body.bedside .weather .ambient { font-size: 9cqh; gap: 2cqw; align-items: baseline; }
+
 body.bedside .bar { align-items: baseline; padding: 0; }
 /* Sized off the aperture itself, not the viewport — this is read from a bed at
    about 1.5 m, so everything is far larger than a phone-in-hand layout wants. */
@@ -676,12 +692,13 @@ body.bedside .hour .tick { bottom: -4.6cqh; font-size: 3.4cqh; }
    own band at the bottom, where it stranded itself opposite a void. Absolute so it
    does not claim a third of the column. */
 body.bedside .weather {
-  position: absolute;
-  top: 13cqh;
-  right: 3.6%;
+  /* A tile in the row like everything else. This used to be absolutely positioned
+     in the top-right corner, from when weather was a fixed header readout rather
+     than a widget you can add or remove — as a tile that placement put a glass
+     panel behind the row with its text hidden underneath. */
   border: 0;
-  padding: 0;
   gap: 0;
+  justify-content: center;
 }
 body.bedside .wxHead { justify-content: flex-end; gap: 2.5cqh; }
 body.bedside .temp { font-size: 9cqh; }
@@ -1486,3 +1503,26 @@ body.bedside .vizGauge, body.bedside .vizSun { max-width: 26cqh; }
 .vizSun .sDone { fill: none; stroke: #FFCC00; stroke-width: 2.5; stroke-linecap: round;
                  opacity: .75; transition: stroke-dasharray .6s ease; }
 @media (prefers-reduced-motion: reduce) { .vizSun .sDone { transition: none; } }
+
+/* The `bars` graphic style — one shape for every scalar, short enough to survive
+   the bedside slot where a dial's arc has no room to read. */
+.vizBarWrap { display: block; }
+.vizBarWrap .bTrack {
+  position: relative; display: block; height: 8px; border-radius: 4px;
+  background: color-mix(in srgb, currentColor 12%, transparent);
+}
+.vizBarWrap .bFill {
+  position: absolute; inset: 0 auto 0 0; border-radius: 4px;
+  background: var(--tone); transition: width .6s ease;
+}
+.vizBarWrap .bMark {
+  position: absolute; top: -2px; width: 2px; height: 12px; margin-left: -1px;
+  border-radius: 1px; background: var(--ink); opacity: .75;
+}
+@media (prefers-reduced-motion: reduce) { .vizBarWrap .bFill { transition: none; } }
+
+/* Appended last so it wins over the `body.bedside .w` block further up, which
+   shares its specificity and would otherwise take the cascade on a tie. The
+   bedside weather readout is absolutely positioned in the top-right corner; its
+   shrink-to-fit width was resolving to 20px, wrapping the temperature one glyph
+   per line into the white bar that showed down the right edge of the aperture. */

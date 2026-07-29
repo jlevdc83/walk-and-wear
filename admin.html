@@ -32,6 +32,7 @@
         Portrait is a phone in your hand. Bedside is a slot read from across the room —
         it cannot hold everything and stay readable.
       </p>
+      <p class="adminNote" id="pollenNote" hidden></p>
       <div class="widgetCols">
         <div>
           <h3 class="widgetHead">On your phone</h3>
@@ -91,6 +92,14 @@
     <!-- Display ------------------------------------------------------- -->
     <section class="card glass adminCard">
       <h2 class="cardLabel">Display</h2>
+      <label class="row">
+        <span class="rowLabel">Widget graphics<em>The meter, scales, dials and arcs on the small tiles</em></span>
+        <select data-set="vizStyle">
+          <option value="auto">Shaped to the data</option>
+          <option value="bars">All bars</option>
+          <option value="off">None — text only</option>
+        </select>
+      </label>
       <label class="row">
         <span class="rowLabel">Keep awake by default</span>
         <input type="checkbox" data-set="keepAwakeDefault">

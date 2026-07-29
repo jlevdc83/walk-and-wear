@@ -1,4 +1,4 @@
-const VERSION = "v82";
+const VERSION = "v83";
 const RETRY_MS = 60 * 1000;      // after a transient failure — not the full refresh interval
 
 // Everything tunable now lives in js/config.js and is edited on admin.html.
@@ -761,7 +761,11 @@ function renderMinis({ h, d, idx, now, nextSun }){
   setMini("hum", rh == null ? "—" : `${round(rh)}%`,
     dew == null ? "outdoor" : `dew point ${round(dew)}°${S.units === "C" ? "C" : "F"}`);
   // 30–60% is the comfortable band; the dial marks it so a number becomes a verdict.
-  setViz("hum", vizGauge(rh, null, rh == null ? "" : rh > 70 || rh < 25 ? "mid" : "ok"));
+  const humTone = rh == null ? "" : rh > 70 || rh < 25 ? "mid" : "ok";
+  setViz("hum", vizPick(S.vizStyle, {
+    auto: vizGauge(rh, null, humTone),
+    bars: vizBar(rh == null ? null : rh / 100, humTone),
+  }));
 
   // Sun: whichever comes next, counting down.
   if (nextSun) {
@@ -773,14 +777,19 @@ function renderMinis({ h, d, idx, now, nextSun }){
   // Where the sun actually is between today's rise and set. A countdown says how
   // long; the arc says how much daylight is left, which is the thing you act on.
   if (d.sunrise?.[0] && d.sunset?.[0]) {
-    setViz("sun", vizSunArc(new Date(d.sunrise[0]), new Date(d.sunset[0]), now));
+    const sr = new Date(d.sunrise[0]), ss = new Date(d.sunset[0]);
+    const dayFrac = ss > sr ? Math.max(0, Math.min(1, (now - sr) / (ss - sr))) : null;
+    setViz("sun", vizPick(S.vizStyle, {
+      auto: vizSunArc(sr, ss, now),
+      bars: vizBar(dayFrac, "mid"),
+    }));
   }
 
   // Tomorrow, for deciding tonight.
   const thi = d.temperature_2m_max?.[1], tlo = d.temperature_2m_min?.[1];
   setIcon("tom", "calendar");
   setMini("tom", thi == null ? "—" : `${round(thi)}° / ${round(tlo)}°`, "high / low");
-  setViz("tom", vizRange(tlo, thi, d.temperature_2m_min?.[0], d.temperature_2m_max?.[0]));
+  setViz("tom", vizPick(S.vizStyle, { auto: vizRange(tlo, thi, d.temperature_2m_min?.[0], d.temperature_2m_max?.[0]) }));
 
   // Pollen: report the worst of the four rather than four numbers nobody reads.
   if (airData) {
@@ -791,13 +800,13 @@ function renderMinis({ h, d, idx, now, nextSun }){
       const band = pollenBand(worst[1]);
       setMini("pollen", band, `${worst[0]} ${Math.round(worst[1])} grains/m³`);
       const bi = POLLEN_STEPS.indexOf(band);
-      setViz("pollen", vizSteps(POLLEN_STEPS, bi, bi >= 3 ? "bad" : bi >= 2 ? "mid" : "ok"));
+      setViz("pollen", vizPick(S.vizStyle, { auto: vizSteps(POLLEN_STEPS, bi, bi >= 3 ? "bad" : bi >= 2 ? "mid" : "ok") }));
     } else {
       // Open-Meteo's pollen comes from the CAMS *European* dataset, so every count is
       // null in North America — verified: Berlin returns values, DC returns nulls.
       // Saying so beats a permanently blank widget that looks broken.
       setMini("pollen", "no data", "Europe only — no free US source");
-      setViz("pollen", vizSteps(POLLEN_STEPS, -1, ""));
+      setViz("pollen", vizPick(S.vizStyle, { auto: vizSteps(POLLEN_STEPS, -1, "") }));
     }
 
     setIcon("pollen", "leaf");
@@ -807,7 +816,7 @@ function renderMinis({ h, d, idx, now, nextSun }){
       pm == null ? "" : `PM2.5 ${pm.toFixed(1)} µg/m³`);
     // AQI is defined by its bands, so draw the bands and put a pin on them. The
     // number alone requires knowing that 50 is the good/moderate line.
-    setViz("aq", vizMeter(aqi, AQI_BANDS));
+    setViz("aq", vizPick(S.vizStyle, { auto: vizMeter(aqi, AQI_BANDS) }));
   } else {
     setMini("pollen", "—", "unavailable");
     setMini("aq", "—", "unavailable");
@@ -854,7 +863,7 @@ function renderHomeMinis(home){
   }
   // A shackle at 17px is decoration. At 56 it is the widget — you read the door's
   // state from the doorway, and the word underneath only confirms it.
-  setViz("lock", vizGlyph(lockGlyph, lockTone));
+  setViz("lock", vizPick(S.vizStyle, { auto: vizGlyph(lockGlyph, lockTone) }));
 
   const lockCard = document.querySelector('[data-widget="lock"]');
   if (lockCard) lockCard.classList.toggle("warn", lockTone === "bad");
@@ -874,7 +883,7 @@ function renderHomeMinis(home){
   // HOOBS reports a word, not a number, so a scale is the honest shape — it shows
   // how far from "excellent" the room is without inventing precision.
   const ai = air ? AIR_STEPS.indexOf(air.quality) : -1;
-  setViz("inAir", vizSteps(AIR_STEPS, ai, ai >= 3 ? "ok" : ai >= 2 ? "mid" : ai >= 0 ? "bad" : ""));
+  setViz("inAir", vizPick(S.vizStyle, { auto: vizSteps(AIR_STEPS, ai, ai >= 3 ? "ok" : ai >= 2 ? "mid" : ai >= 0 ? "bad" : "") }));
 
   const hum = pick(hums, S.humiditySensor);
   const target = S.humidityTarget;
@@ -883,8 +892,11 @@ function renderHomeMinis(home){
     hum ? `${hum.value < target ? "below" : "at or above"} the ${target}% target` : "no sensor");
   // The target as a tick on the dial: the gap is the whole point of this widget,
   // and a sentence saying "below" makes you hold two numbers in your head.
-  setViz("inHum", vizGauge(hum ? hum.value : null, target,
-    !hum ? "" : hum.value < target ? "mid" : "ok"));
+  const inHumTone = !hum ? "" : hum.value < target ? "mid" : "ok";
+  setViz("inHum", vizPick(S.vizStyle, {
+    auto: vizGauge(hum ? hum.value : null, target, inHumTone),
+    bars: vizBar(hum ? hum.value / 100 : null, inHumTone, target / 100),
+  }));
 
   // Full records, not just names — the admin page cannot show a level it never saw.
   const all = home.batteries || [];
@@ -1017,6 +1029,14 @@ function readSnapshot(){
 
 /* --- Refresh ----------------------------------------------------------- */
 
+function applyPollenCoverage(loc){
+  const covered = pollenCovered(loc && loc.lat, loc && loc.lon);
+  document.body.classList.toggle("noPollen", !covered);
+  const card = document.querySelector('[data-widget="pollen"]');
+  if (card && !covered) card.classList.add("widgetOff");
+  try { localStorage.setItem(POLLEN_KEY, covered ? "1" : "0"); } catch (e) { /* private mode */ }
+}
+
 async function refresh(){
   clearTimeout(retryTimer);
   try {
@@ -1024,6 +1044,11 @@ async function refresh(){
     const loc = await resolveLocation();
     hideLocate();
     setZipMeta(loc.name || loc.zip || await placeName(loc));
+
+    // Drop the pollen tile where the dataset does not reach, rather than leaving a
+    // permanent "no data" that reads as a broken widget. It comes back on its own if
+    // the location moves into the covered area.
+    applyPollenCoverage(loc);
 
     const forecast = await fetchForecast(loc.lat, loc.lon);
     await fetchAir(loc.lat, loc.lon);

@@ -323,6 +323,22 @@ function describeData(){
     `${age} · location: ${zip ? `ZIP ${zip}` : place || "device"}`;
 }
 
+/// Explain a missing pollen tile instead of letting it look like a bug. The app
+/// records coverage on its last refresh, so this needs no network call of its own.
+function describePollen(){
+  const note = document.getElementById("pollenNote");
+  if (!note) return;
+  const covered = localStorage.getItem(POLLEN_KEY);
+  const off = covered === "0";
+  note.hidden = !off;
+  if (off) {
+    note.textContent = "Pollen is hidden here: Open-Meteo's counts come from the CAMS "
+      + "European dataset, which returns nothing for this location. It reappears on its "
+      + "own inside the covered area.";
+  }
+}
+describePollen();
+
 document.getElementById("clearCache").addEventListener("click", () => {
   localStorage.removeItem("dashboard_snapshot");
   describeData(); flash("Cache cleared");
