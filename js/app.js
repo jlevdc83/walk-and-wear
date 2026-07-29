@@ -1,4 +1,4 @@
-const VERSION = "v80";
+const VERSION = "v81";
 const RETRY_MS = 60 * 1000;      // after a transient failure — not the full refresh interval
 
 // Everything tunable now lives in js/config.js and is edited on admin.html.
@@ -521,16 +521,11 @@ function renderOutlook(outlook){
   const el = $("outlook");
   if (!el) return;
   lastOutlook = outlook;
-  el.innerHTML = outlook.map((s, i) => {
-    const hour = new Intl.DateTimeFormat([], { hour: "numeric" }).format(s.time);
-    // Label every third hour; more than that is noise at this width.
-    const tick = (i % 3 === 0) ? `<span class="tick">${hour}</span>` : "";
-    // A button, not a div: the strip is the densest thing on screen and was the only
-    // part that couldn't explain itself. `title` is a desktop tooltip and does nothing
-    // under a finger.
-    return `<button class="hour ${s.state}" type="button" data-i="${i}"
-              aria-label="${hour}, ${s.label}">${tick}</button>`;
-  }).join("");
+  // Buttons throughout, not divs: the strip is the densest thing on screen and every
+  // presentation should still be able to explain an hour when tapped. `title` is a
+  // desktop tooltip and does nothing under a finger.
+  el.className = `outlook look-${S.walkDisplay}`;
+  el.innerHTML = renderWalkOutlook(S.walkDisplay, outlook);
 }
 
 /// Tap an hour to have it explain its colour. Bedside mode ignores this — nobody is
@@ -808,8 +803,14 @@ function renderHomeMinis(home){
   }
   const lock = (home.locks || [])[0];
   const lockTone = toneFor("lock", lock && lock.state);
-  setIcon("lock", lock && lock.state === "unlocked" ? "unlock" : "lock", lockTone);
-  setMini("lock", lock ? lock.state : "—", lock ? lock.name : "no lock found");
+  // The glyph sits with the state, not up in the label — a shackle that is open or
+  // closed says "unlocked" faster than the word does, and it reads across a room.
+  const lockGlyph = lock && lock.state === "unlocked" ? "unlock" : "lock";
+  setIcon("lock", lockGlyph, lockTone);
+  const lv = $("lockValue");
+  if (lv) lv.innerHTML = `<span class="valIcon">${icon(lockGlyph, lockTone)}</span>${lock ? lock.state : "—"}`;
+  const ls = $("lockSub");
+  if (ls) ls.textContent = lock ? lock.name : "no lock found";
 
   // The lock's own battery belongs on the lock, not buried among eighteen others.
   //
@@ -855,10 +856,12 @@ function renderHomeMinis(home){
 
   // Full records, not just names — the admin page cannot show a level it never saw.
   const all = home.batteries || [];
-  if (all.length) saveBattRoster(all);
+  if (all.length) saveBattRoster(all);   // roster keeps everything, so admin can re-enable
 
   const watch = loadBattWatch();
-  const watched = watch === null ? all : all.filter((b) => watch.some((k) => devMatches(b, k)));
+  const ignored = S.battIgnore || [];
+  const inService = all.filter((b) => !ignored.some((k) => devMatches(b, k)));
+  const watched = watch === null ? inService : inService.filter((b) => watch.some((k) => devMatches(b, k)));
   const isLow = (b) => b.flag || (typeof b.level === "number" && b.level <= S.battThreshold);
   const low = watched.filter(isLow);
 

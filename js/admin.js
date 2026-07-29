@@ -253,7 +253,8 @@ function renderBatteries(){
   ul.innerHTML = roster.map((d) => {
     // Tolerate the old name-only roster from a previous version.
     const dev = typeof d === "string" ? { name: d } : d;
-    const on = watch === null || watch.some((s) => devMatches(dev, s));
+    const ignored = (S.battIgnore || []).some((k) => devMatches(dev, k));
+    const on = !ignored && (watch === null || watch.some((s) => devMatches(dev, s)));
     const lvl = dev.level == null ? null : Math.round(dev.level);
     const low = dev.flag || (lvl != null && lvl <= S.battThreshold);
     const meta = [dev.type, lvl == null ? null : `${lvl}%`].filter(Boolean).join(" · ");
@@ -263,7 +264,8 @@ function renderBatteries(){
         <input type="checkbox" ${on ? "checked" : ""} data-batt="${devKey(dev).replace(/"/g, "&quot;")}">
         <span class="devIcon">${icon(deviceIcon(dev), tone)}</span>
         <span class="widgetName">${dev.name}</span>
-        <span class="widgetNote">${meta || "no level reported"}${low ? " — low" : ""}</span>
+        <span class="widgetNote">${meta || "no level reported"}${
+          ignored ? " — not in service" : low ? " — low" : ""}</span>
       </label>
     </li>`;
   }).join("");
@@ -278,6 +280,15 @@ document.addEventListener("change", (e) => {
   let watch = loadBattWatch();
   if (watch === null) watch = roster.map(devKey);   // expand "all" before removing one from it
   const key = cb.dataset.batt;
+  // Re-enabling something excluded as out-of-service has to clear that too, or the
+  // checkbox would tick and nothing would change.
+  if (cb.checked && (S.battIgnore || []).some((k) => k === key)) {
+    S.battIgnore = S.battIgnore.filter((k) => k !== key);
+    saveSettings(S);
+  } else if (!cb.checked) {
+    S.battIgnore = [...new Set([...(S.battIgnore || []), key])];
+    saveSettings(S);
+  }
   watch = cb.checked ? [...new Set([...watch, key])] : watch.filter((n) => n !== key);
   saveBattWatch(watch);
   renderBatteries(); flash();

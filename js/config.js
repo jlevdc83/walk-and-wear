@@ -37,7 +37,21 @@ const SETTING_DEFAULTS = {
   // go dark has nothing to do with what time it is.
   dimOnArmed: "any",
 
+  // How the hourly walk outlook draws itself. Every one runs the same verdict for
+  // the same hours; they differ only in what encodes it. Several avoid colour
+  // entirely, because a colour key is something you have to remember.
+  //   icons  glyph per hour        height  taller means better
+  //   line   walkability curve     windows only the good spans, with times
+  //   labels GO / WAIT per hour    radial  a clock dial
+  //   spark  line with markers     text    a plain sentence
+  //   density solid vs faint       ladder  a vertical list of hours
+  walkDisplay: "icons",
+
   // Batteries
+  // Devices excluded regardless of the watch list — hardware that exists in HOOBS
+  // but is not actually in service, so its level is noise rather than a warning.
+  // Patio Gate reads 0% because the sensor is not in use, not because it is dying.
+  battIgnore: ["Patio Gate|sensor"],
   battThreshold: 20,
   // Always shown first, whatever its level. A healthy lock sorts last under
   // worst-first, which is exactly backwards for the one battery whose death locks
@@ -245,4 +259,122 @@ function deviceIcon(dev){
   if (/gate|gar(a|)ge/.test(name)) return "gate";
   if (/door|patio|entry/.test(name)) return "door";
   return "sensor";
+}
+
+
+/* --- Walk outlook rendering ------------------------------------------------
+   Ten presentations of one thing. The verdict logic is untouched — each hour is
+   still walkable or not for exactly the same reasons — so these differ only in
+   how that is shown. Most are legible without a colour key, which was the point:
+   a legend is a thing to memorise.
+
+   `score` exists only for the shapes that need a magnitude (height, line, spark).
+   It is derived from the verdict, never a second opinion about the weather. */
+
+const WALK_SCORE = { "walk-ideal": 100, "walk-golden": 100, "walk-warm": 70,
+                     "walk-cold": 60, "walk-paw": 15, "walk-rain-alert": 15 };
+const WALK_GLYPH = { "walk-ideal": "🐾", "walk-golden": "🐾", "walk-warm": "🚶",
+                     "walk-cold": "🧥", "walk-paw": "🔥", "walk-rain-alert": "🌧" };
+
+function walkScore(s){ return WALK_SCORE[s.state] ?? 50; }
+function hourLabel(d){ return new Intl.DateTimeFormat([], { hour: "numeric" }).format(d); }
+
+/// Collapse the hours into contiguous good / not-good spans.
+function walkSpans(outlook){
+  const spans = [];
+  for (const s of outlook) {
+    const last = spans[spans.length - 1];
+    if (last && last.walkable === s.walkable) last.end = s.time;
+    else spans.push({ walkable: s.walkable, start: s.time, end: s.time, state: s.state });
+  }
+  return spans;
+}
+
+function renderWalkOutlook(mode, outlook){
+  if (!outlook.length) return "";
+  const tick = (i) => (i % 3 === 0) ? `<span class="tick">${hourLabel(outlook[i].time)}</span>` : "";
+  const btn = (s, i, inner, cls = "") =>
+    `<button class="hour ${s.state} ${cls}" type="button" data-i="${i}"
+      aria-label="${hourLabel(s.time)}, ${s.label}">${inner}</button>`;
+
+  switch (mode) {
+    // A glyph per hour. Nothing to memorise: a paw means go, a flame means wait.
+    case "icons":
+      return outlook.map((s, i) => btn(s, i,
+        `<span class="hGlyph">${WALK_GLYPH[s.state] || "•"}</span>${tick(i)}`, "asIcon")).join("");
+
+    // Height carries the meaning, so it survives being read in greyscale.
+    case "height":
+      return outlook.map((s, i) => btn(s, i,
+        `<span class="hFill" style="height:${walkScore(s)}%"></span>${tick(i)}`, "asHeight")).join("");
+
+    // GO / WAIT in words — the least ambiguous version there is.
+    case "labels":
+      return outlook.map((s, i) => btn(s, i,
+        `<span class="hWord">${s.walkable ? "GO" : "WAIT"}</span>${tick(i)}`, "asLabel")).join("");
+
+    // Solid means go, faint means wait. One hue, no key.
+    case "density":
+      return outlook.map((s, i) => btn(s, i, tick(i),
+        s.walkable ? "asDensity on" : "asDensity off")).join("");
+
+    // Only the good windows are drawn, with their times. Absence is the signal.
+    case "windows": {
+      const good = walkSpans(outlook).filter((x) => x.walkable);
+      if (!good.length) return `<span class="wNone">Nothing good in the next ${outlook.length}h</span>`;
+      return good.map((x) => `<span class="wSpan">
+        <span class="wBar"></span>
+        <span class="wTime">${hourLabel(x.start)}–${hourLabel(new Date(x.end.getTime() + 36e5))}</span>
+      </span>`).join("");
+    }
+
+    // A sentence. Zero legend, and it reads aloud correctly for VoiceOver.
+    case "text": {
+      const spans = walkSpans(outlook);
+      return `<span class="wText">${spans.map((x) => {
+        const from = hourLabel(x.start), to = hourLabel(new Date(x.end.getTime() + 36e5));
+        return `${x.walkable ? "Good" : "Wait"} ${from}–${to}`;
+      }).join(" · ")}</span>`;
+    }
+
+    // A vertical list — the most readable when there is room for it.
+    case "ladder":
+      return outlook.map((s, i) => `<button class="wRow ${s.state}" type="button" data-i="${i}">
+        <span class="wRowGlyph">${WALK_GLYPH[s.state] || "•"}</span>
+        <span class="wRowTime">${hourLabel(s.time)}</span>
+        <span class="wRowVerdict">${s.label.replace(/^\S+\s/, "")}</span>
+      </button>`).join("");
+
+    case "line":
+    case "spark": {
+      const w = 100, h = mode === "spark" ? 22 : 34, n = outlook.length;
+      const pts = outlook.map((s, i) => [ (i / (n - 1)) * w, h - (walkScore(s) / 100) * (h - 4) - 2 ]);
+      const d = pts.map((p, i) => `${i ? "L" : "M"}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ");
+      const area = `${d} L${w},${h} L0,${h} Z`;
+      const dots = outlook.map((s, i) => s.walkable
+        ? `<circle cx="${pts[i][0].toFixed(1)}" cy="${pts[i][1].toFixed(1)}" r="1.7" class="wDot"/>` : "").join("");
+      return `<svg class="wChart ${mode}" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true">
+        ${mode === "line" ? `<path class="wArea" d="${area}"/>` : ""}
+        <path class="wLine" d="${d}"/>${dots}
+      </svg>
+      <span class="wAxis"><span>${hourLabel(outlook[0].time)}</span><span>${hourLabel(outlook[n-1].time)}</span></span>`;
+    }
+
+    // A dial: the hours laid out the way a clock lays them out.
+    case "radial": {
+      const R = 42, C = 50, n = outlook.length;
+      const arc = outlook.map((s, i) => {
+        const a0 = (i / n) * Math.PI * 2 - Math.PI / 2, a1 = ((i + 0.86) / n) * Math.PI * 2 - Math.PI / 2;
+        const p = (a, r) => `${(C + Math.cos(a) * r).toFixed(1)},${(C + Math.sin(a) * r).toFixed(1)}`;
+        const rIn = s.walkable ? 26 : 34;
+        return `<path class="wArc ${s.state}" d="M${p(a0, rIn)} L${p(a0, R)} A${R},${R} 0 0 1 ${p(a1, R)} L${p(a1, rIn)} Z"/>`;
+      }).join("");
+      const first = outlook.find((s) => s.walkable);
+      return `<svg class="wDial" viewBox="0 0 100 100" aria-hidden="true">${arc}</svg>
+        <span class="wDialNote">${first ? `next good ${hourLabel(first.time)}` : "nothing good"}</span>`;
+    }
+
+    default:
+      return renderWalkOutlook("icons", outlook);
+  }
 }
