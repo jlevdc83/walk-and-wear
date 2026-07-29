@@ -39,8 +39,15 @@ HOOBS_PASS = os.environ.get("HOOBS_PASS", "")
 HTTP_TIMEOUT = 8.0
 
 # Ported from pi-services/mcp/hoobs_mcp.py — keep in step.
+#
+# All three, not just the first. Shipping only SECURITY_STATE meant the successful
+# parse raised NameError on the lock line and every field came back null — invisible
+# locally, because every local test hit the HOOBS-unreachable path instead.
 SECURITY_STATE = {0: "armed (home)", 1: "armed (away)", 2: "armed (night)",
                   3: "disarmed", 4: "TRIGGERED"}
+LOCK_STATE = {0: "unlocked", 1: "locked", 2: "jammed", 3: "unknown"}
+AIR_QUALITY = {0: "unknown", 1: "excellent", 2: "good", 3: "fair",
+               4: "inferior", 5: "poor"}
 
 # The browser polls every 15s; without this each open tab would multiply load on
 # hoobsd for a value that changes a few times a day.
