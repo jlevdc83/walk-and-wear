@@ -1,4 +1,4 @@
-const VERSION = "v64";
+const VERSION = "v65";
 const REFRESH_MS = 20 * 60 * 1000;
 const RETRY_MS = 60 * 1000;      // after a transient failure — not the full refresh interval
 const RUN_HOT = true;
@@ -964,12 +964,59 @@ if ("serviceWorker" in navigator) {
 const bedsideParam = new URLSearchParams(location.search).get("bedside");
 if (bedsideParam === "flip") document.body.classList.add("flip");
 
+// Peek: hold to get the full app while the phone is mounted.
+//
+// The orientation rule assumed you could rotate the device. The bedside one is fixed
+// in a cradle, so "turn it to get the app" would mean pulling it out of the enclosure.
+// A long press is the way in. Long, not double-tap — a bedside screen gets brushed and
+// bumped and tapped to wake, and none of that should drop the clock.
+//
+// It always reverts. Without that the display quietly stops being a clock and you find
+// it in app mode at 3am.
+const PEEK_HOLD_MS = 600;
+const PEEK_TIMEOUT_MS = 30 * 1000;
+let peeking = false;
+let peekTimer = null;
+let pressTimer = null;
+
 function applyBedsideMode(){
   const landscape = window.innerWidth > window.innerHeight;
-  const on = bedsideParam !== null && landscape;
+  const on = bedsideParam !== null && landscape && !peeking;
   document.body.classList.toggle("bedside", on);
   if (on) clearHourDetail();
 }
+
+function endPeek(){
+  if (!peeking) return;
+  peeking = false;
+  clearTimeout(peekTimer);
+  clearHourDetail();
+  applyBedsideMode();
+}
+
+function holdPeekOpen(){
+  clearTimeout(peekTimer);
+  peekTimer = setTimeout(endPeek, PEEK_TIMEOUT_MS);
+}
+
+function beginPeek(){
+  if (bedsideParam === null || peeking) return;
+  if (!document.body.classList.contains("bedside")) return;   // already the full app
+  peeking = true;
+  applyBedsideMode();
+  holdPeekOpen();
+}
+
+document.addEventListener("pointerdown", () => {
+  clearTimeout(pressTimer);
+  if (peeking) { holdPeekOpen(); return; }      // interacting keeps it open
+  pressTimer = setTimeout(beginPeek, PEEK_HOLD_MS);
+}, { passive: true });
+
+["pointerup", "pointercancel"].forEach((evt) =>
+  document.addEventListener(evt, () => clearTimeout(pressTimer), { passive: true })
+);
+
 applyBedsideMode();
 window.addEventListener("resize", applyBedsideMode);
 window.addEventListener("orientationchange", applyBedsideMode);
