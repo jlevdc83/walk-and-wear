@@ -1,4 +1,4 @@
-const VERSION = "v61";
+const VERSION = "v62";
 const REFRESH_MS = 20 * 60 * 1000;
 const RETRY_MS = 60 * 1000;      // after a transient failure — not the full refresh interval
 const RUN_HOT = true;
@@ -829,6 +829,55 @@ function undim(){
   nearOffTimer = setTimeout(nearOff, NEAR_OFF_AFTER_MS);
 }
 
+/* --- Ring alarm feed (Pi build only) -------------------------------------
+   Capability-detected, not a separate build. The Pi-hosted copy serves
+   /api/alarm; the public one does not, so this quietly stays off there. Same
+   files either way — a fork would drift, and this app has already been bitten
+   once by two numbers computed from different windows.
+
+   Armed means the house is set and nobody is using the display, so it goes
+   straight to near-off instead of waiting out the idle timer. Disarming brings
+   it back. Only meaningful on a dedicated bedside device — on a phone you carry,
+   "away" means the screen is in your hand. */
+
+const ALARM_POLL_MS = 15 * 1000;
+let hasAlarmFeed = false;
+let alarmTimer = null;
+let lastAlarmState = null;
+
+async function pollAlarm(){
+  try {
+    const r = await fetch("api/alarm", { cache: "no-store" });
+    if (!r.ok) throw new Error("NO_FEED");
+    const j = await r.json();
+    hasAlarmFeed = true;
+
+    // The endpoint answers 200 with ok:false when HOOBS itself is unreachable.
+    // Testing only the HTTP status treated that as a live feed reporting "not
+    // armed", which called undim() and reset the idle timers — so the bedside
+    // display would never dim while HOOBS was down. Leave the timers alone.
+    if (!j.ok) return;
+
+    const armed = typeof j.state === "string" && j.state.startsWith("armed");
+    if (j.state !== lastAlarmState) {
+      lastAlarmState = j.state;
+      // Only act on a change, so a touch can still wake the screen while armed
+      // without the next poll immediately blacking it out again.
+      if (armed && keepAwake) nearOff();
+      else if (!armed) undim();
+    }
+  } catch {
+    hasAlarmFeed = false;   // public build, or the Pi is unreachable — no feature, no error
+  }
+}
+
+function startAlarmFeed(){
+  clearInterval(alarmTimer);
+  pollAlarm().then(() => {
+    if (hasAlarmFeed) alarmTimer = setInterval(pollAlarm, ALARM_POLL_MS);
+  });
+}
+
 $("awakeBtn").addEventListener("click", async () => {
   keepAwake = !keepAwake;
   localStorage.setItem("dashboard_keepAwake", String(keepAwake));
@@ -868,6 +917,7 @@ renderVersionTag();
 updateClock();
 startTickers();
 syncAwakeButton();
+startAlarmFeed();
 if (keepAwake) { acquireWakeLock(); undim(); }
 // Cache first, network second: something readable is on screen before the request
 // leaves. If the cache is empty or stale this is a no-op and refresh() fills it in.
