@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#0c1730" />
+  <title>Walk &amp; Wear — Settings</title>
+  <link rel="stylesheet" href="css/styles.css">
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon.png">
+</head>
+<body class="phase-night admin">
+
+  <div class="sky" aria-hidden="true">
+    <span class="lum lum1"></span>
+    <span class="lum lum2"></span>
+    <span class="lum lum3"></span>
+  </div>
+
+  <div class="adminPage">
+
+    <header class="adminBar">
+      <h1 class="adminTitle">Settings</h1>
+      <a class="linkBtn" href="index.html">← Back</a>
+    </header>
+
+    <p class="adminSaved" id="savedNote" aria-live="polite">Changes save as you make them.</p>
+
+    <!-- Widgets ------------------------------------------------------- -->
+    <section class="card glass adminCard">
+      <h2 class="cardLabel">Widgets</h2>
+      <p class="adminNote">
+        Portrait is a phone in your hand. Bedside is a slot read from across the room —
+        it cannot hold everything and stay readable.
+      </p>
+      <div class="widgetCols">
+        <div>
+          <h3 class="widgetHead">On your phone</h3>
+          <ul class="widgetList" id="listPortrait"></ul>
+        </div>
+        <div>
+          <h3 class="widgetHead">Bedside</h3>
+          <ul class="widgetList" id="listBedside"></ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- Personal ------------------------------------------------------ -->
+    <section class="card glass adminCard">
+      <h2 class="cardLabel">You</h2>
+      <label class="row">
+        <span class="rowLabel">Runs warm<em>Adds 4° to every felt temperature before deciding</em></span>
+        <input type="checkbox" data-set="runHot">
+      </label>
+      <label class="row">
+        <span class="rowLabel">Units</span>
+        <select data-set="units">
+          <option value="F">Fahrenheit</option>
+          <option value="C">Celsius</option>
+        </select>
+      </label>
+    </section>
+
+    <!-- Walk ---------------------------------------------------------- -->
+    <section class="card glass adminCard">
+      <h2 class="cardLabel">Dog walk</h2>
+      <label class="row">
+        <span class="rowLabel">Look ahead<em>Hours in the strip. Past ~12 it runs into the small hours.</em></span>
+        <input type="number" min="4" max="24" step="1" data-set="outlookHours">
+      </label>
+      <label class="row">
+        <span class="rowLabel">Short window<em>At or under this, a window shows both ends rather than just its start</em></span>
+        <input type="number" min="1" max="6" step="1" data-set="shortWindowHours">
+      </label>
+    </section>
+
+    <!-- Display ------------------------------------------------------- -->
+    <section class="card glass adminCard">
+      <h2 class="cardLabel">Display</h2>
+      <label class="row">
+        <span class="rowLabel">Keep awake by default</span>
+        <input type="checkbox" data-set="keepAwakeDefault">
+      </label>
+      <label class="row">
+        <span class="rowLabel">Dim after<em>Seconds idle, at night, with keep-awake on</em></span>
+        <input type="number" min="10" max="3600" step="10" data-set="dimAfterSec">
+      </label>
+      <label class="row">
+        <span class="rowLabel">Go dark after<em>Seconds idle. Black, clock only.</em></span>
+        <input type="number" min="30" max="7200" step="30" data-set="nearOffAfterSec">
+      </label>
+      <label class="row">
+        <span class="rowLabel">Peek lasts<em>Seconds a long-press reveal stays open</em></span>
+        <input type="number" min="5" max="300" step="5" data-set="peekSec">
+      </label>
+      <label class="row">
+        <span class="rowLabel">Refresh every<em>Minutes</em></span>
+        <input type="number" min="5" max="120" step="5" data-set="refreshMin">
+      </label>
+    </section>
+
+    <!-- Bedside aperture ---------------------------------------------- -->
+    <section class="card glass adminCard">
+      <h2 class="cardLabel">Bedside aperture</h2>
+      <p class="adminNote">
+        The window the enclosure leaves open, in millimetres. Defaults match the CAD.
+        The preview is to scale against the iPhone 11's display — tape a paper mask to the
+        phone and compare before anything is printed.
+      </p>
+
+      <div class="maskPreview" id="maskPreview">
+        <div class="maskWindow" id="maskWindow"></div>
+        <span class="maskNotch" title="notch side"></span>
+      </div>
+      <p class="maskReadout" id="maskReadout">—</p>
+
+      <label class="row">
+        <span class="rowLabel">Width (mm)</span>
+        <input type="number" min="40" max="139" step="0.5" data-set="maskW">
+      </label>
+      <label class="row">
+        <span class="rowLabel">Height (mm)</span>
+        <input type="number" min="20" max="64" step="0.5" data-set="maskH">
+      </label>
+      <label class="row">
+        <span class="rowLabel">Offset (mm)<em>Toward the keypad, to bury the notch</em></span>
+        <input type="number" min="-20" max="20" step="0.5" data-set="maskOffset">
+      </label>
+      <label class="row">
+        <span class="rowLabel">Mirror offset<em>If the phone mounts the other way up. The CAD does not settle this.</em></span>
+        <input type="checkbox" data-set="maskFlip">
+      </label>
+      <p class="adminActions">
+        <a class="linkBtn" href="index.html?bedside" target="_blank" rel="noopener">Open bedside view</a>
+      </p>
+    </section>
+
+    <!-- Data ---------------------------------------------------------- -->
+    <section class="card glass adminCard">
+      <h2 class="cardLabel">Data</h2>
+      <p class="adminNote" id="dataNote">—</p>
+      <p class="adminActions">
+        <button class="linkBtn" type="button" id="clearCache">Clear cached forecast</button>
+        <button class="linkBtn" type="button" id="clearLocation">Forget location</button>
+        <button class="linkBtn" type="button" id="resetAll">Reset everything</button>
+      </p>
+    </section>
+
+  </div>
+
+  <script src="js/config.js"></script>
+  <script src="js/admin.js"></script>
+</body>
+</html>

@@ -4,13 +4,16 @@
 // a network round trip. Forecast calls are never cached here — staleness is handled
 // in app.js, which stores the last good reading and labels its age honestly.
 
-const CACHE = "walk-and-wear-v66";
+const CACHE = "walk-and-wear-v68";
 
 const SHELL = [
   "./",
   "./index.html",
   "./css/styles.css",
   "./js/app.js",
+  "./js/config.js",
+  "./admin.html",
+  "./js/admin.js",
   "./manifest.webmanifest",
   "./assets/favicon.png",
   "./assets/apple-touch-icon.png",

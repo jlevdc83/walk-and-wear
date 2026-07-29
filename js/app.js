@@ -1,7 +1,11 @@
-const VERSION = "v66";
-const REFRESH_MS = 20 * 60 * 1000;
+const VERSION = "v68";
 const RETRY_MS = 60 * 1000;      // after a transient failure — not the full refresh interval
-const RUN_HOT = true;
+
+// Everything tunable now lives in js/config.js and is edited on admin.html.
+const S = loadSettings();
+applyMaskVars(S);
+const REFRESH_MS = S.refreshMin * 60 * 1000;
+const RUN_HOT = S.runHot;
 
 const $ = (id) => document.getElementById(id);
 let lastRefreshTime = null;
@@ -253,7 +257,7 @@ async function fetchForecast(lat, lon){
   const url =
     `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}` +
     `&timezone=${encodeURIComponent(tz)}` +
-    `&temperature_unit=fahrenheit&windspeed_unit=mph` +
+    `&temperature_unit=${S.units === "C" ? "celsius" : "fahrenheit"}&windspeed_unit=mph` +
     `&hourly=temperature_2m,apparent_temperature,precipitation_probability,precipitation,cloudcover,windspeed_10m,uv_index,is_day,weathercode,relative_humidity_2m` +
     `&daily=temperature_2m_max,temperature_2m_min,sunrise,sunset` +
     `&forecast_days=2&t=${Date.now()}`;
@@ -399,7 +403,7 @@ function walkDecision(feelsLikeF, pawRisk, rainingNow, windMph, horizon){
    The forecast already carries 48 hours; only the current hour was ever read.
    This runs the same tuned verdict across the coming hours. No new data. */
 
-const OUTLOOK_HOURS = 10;
+const OUTLOOK_HOURS = S.outlookHours;
 
 /// The verdict for an arbitrary hour, not just the current one.
 function walkStateAt(h, i, now){
@@ -677,7 +681,7 @@ function timingPhrase(timing){
     case "until": return `Good until ${fmtShortTime(timing.time)}`;
     case "next":
       // A short window gets both ends; a long one only needs its start.
-      return (timing.until && timing.hours <= 2)
+      return (timing.until && timing.hours <= S.shortWindowHours)
         ? `Window ${fmtShortTime(timing.time)}–${fmtShortTime(timing.until)}`
         : `Better from ${fmtShortTime(timing.time)}`;
     case "none":  return `Nothing good for ${OUTLOOK_HOURS}h`;
@@ -801,13 +805,13 @@ $("zipMeta").addEventListener("click", openLocate);
 // Two idle tiers rather than a configured bedtime. A fixed hour is a setting to get
 // wrong and a knob to maintain; idleness already carries the signal — if you are still
 // looking at it, it stays lit, and if you have gone to sleep it goes dark on its own.
-const DIM_AFTER_MS      = 60 * 1000;        // warm amber
-const NEAR_OFF_AFTER_MS = 5 * 60 * 1000;    // as dark as a web page can go
+const DIM_AFTER_MS      = S.dimAfterSec * 1000;      // warm amber
+const NEAR_OFF_AFTER_MS = S.nearOffAfterSec * 1000;  // as dark as a web page can go
 
 let wakeLock = null;
 let dimTimer = null;
 let nearOffTimer = null;
-let keepAwake = localStorage.getItem("dashboard_keepAwake") === "true";
+let keepAwake = (localStorage.getItem("dashboard_keepAwake") ?? String(S.keepAwakeDefault)) === "true";
 
 function wakeLockSupported(){
   return "wakeLock" in navigator && typeof navigator.wakeLock?.request === "function";
@@ -976,40 +980,7 @@ if (bedsideParam === "flip") document.body.classList.add("flip");
    The clock is not a widget. It is the one thing a bedside display must always
    show, and making it optional would only create a way to break it. */
 
-const WIDGETS = [
-  { id: "walk",    label: "Dog walk",  note: "Verdict, timing, and the hourly strip" },
-  { id: "wear",    label: "Wear",      note: "Jacket and clothing" },
-  { id: "bring",   label: "Bring",     note: "Umbrella or shell — only when needed" },
-  { id: "protect", label: "Protect",   note: "Sunscreen and sunglasses — only when needed" },
-  { id: "weather", label: "Weather",   note: "Temperature and the stats strip" },
-];
-
-const LAYOUT_KEY = "dashboard_layout";
-const DEFAULT_LAYOUT = {
-  portrait: ["wear", "walk", "bring", "protect", "weather"],
-  bedside:  ["walk", "weather"],
-};
-
-function loadLayout(){
-  try {
-    const saved = JSON.parse(localStorage.getItem(LAYOUT_KEY) || "null");
-    if (!saved) return structuredClone(DEFAULT_LAYOUT);
-    // Drop ids that no longer exist, so a removed widget cannot wedge the layout.
-    const known = new Set(WIDGETS.map((w) => w.id));
-    return {
-      portrait: (saved.portrait || DEFAULT_LAYOUT.portrait).filter((id) => known.has(id)),
-      bedside: (saved.bedside || DEFAULT_LAYOUT.bedside).filter((id) => known.has(id)),
-    };
-  } catch {
-    return structuredClone(DEFAULT_LAYOUT);
-  }
-}
-
 let layout = loadLayout();
-
-function saveLayout(){
-  try { localStorage.setItem(LAYOUT_KEY, JSON.stringify(layout)); } catch { /* private mode */ }
-}
 
 function currentContext(){
   return document.body.classList.contains("bedside") ? "bedside" : "portrait";
@@ -1038,83 +1009,6 @@ function applyLayout(){
   }
 }
 
-/* --- Widgets panel ------------------------------------------------------- */
-
-function renderWidgetList(context){
-  const ul = $(context === "portrait" ? "listPortrait" : "listBedside");
-  if (!ul) return;
-  const active = layout[context] || [];
-  // Chosen widgets first in their configured order, then the rest, unchecked.
-  const rows = [
-    ...active.map((id) => WIDGETS.find((w) => w.id === id)).filter(Boolean),
-    ...WIDGETS.filter((w) => !active.includes(w.id)),
-  ];
-  ul.innerHTML = rows.map((w) => {
-    const i = active.indexOf(w.id);
-    const on = i !== -1;
-    return `<li class="widgetRow${on ? "" : " off"}">
-      <label class="widgetPick">
-        <input type="checkbox" ${on ? "checked" : ""} data-ctx="${context}" data-id="${w.id}">
-        <span class="widgetName">${w.label}</span>
-        <span class="widgetNote">${w.note}</span>
-      </label>
-      <span class="widgetMove">
-        <button type="button" data-move="up" data-ctx="${context}" data-id="${w.id}"
-                aria-label="Move ${w.label} up" ${on && i > 0 ? "" : "disabled"}>↑</button>
-        <button type="button" data-move="down" data-ctx="${context}" data-id="${w.id}"
-                aria-label="Move ${w.label} down" ${on && i < active.length - 1 ? "" : "disabled"}>↓</button>
-      </span>
-    </li>`;
-  }).join("");
-}
-
-function renderWidgetPanel(){
-  renderWidgetList("portrait");
-  renderWidgetList("bedside");
-}
-
-$("widgetsPanel").addEventListener("change", (e) => {
-  const cb = e.target.closest("input[type=checkbox]");
-  if (!cb) return;
-  const { ctx, id } = cb.dataset;
-  const list = layout[ctx];
-  if (cb.checked) { if (!list.includes(id)) list.push(id); }
-  else { layout[ctx] = list.filter((x) => x !== id); }
-  saveLayout(); renderWidgetPanel(); applyLayout();
-});
-
-$("widgetsPanel").addEventListener("click", (e) => {
-  const btn = e.target.closest("button[data-move]");
-  if (!btn) return;
-  const { ctx, id, move } = btn.dataset;
-  const list = layout[ctx];
-  const i = list.indexOf(id);
-  const j = move === "up" ? i - 1 : i + 1;
-  if (i === -1 || j < 0 || j >= list.length) return;
-  [list[i], list[j]] = [list[j], list[i]];
-  saveLayout(); renderWidgetPanel(); applyLayout();
-});
-
-function openWidgets(){
-  renderWidgetPanel();
-  $("widgetsPanel").classList.remove("hidden");
-  $("decisions").classList.add("hidden");
-  $("weather").classList.add("hidden");
-}
-function closeWidgets(){
-  $("widgetsPanel").classList.add("hidden");
-  $("decisions").classList.remove("hidden");
-  $("weather").classList.remove("hidden");
-  applyLayout();
-}
-
-$("widgetsBtn").addEventListener("click", openWidgets);
-$("widgetsDone").addEventListener("click", closeWidgets);
-$("widgetsReset").addEventListener("click", () => {
-  layout = structuredClone(DEFAULT_LAYOUT);
-  saveLayout(); renderWidgetPanel(); applyLayout();
-});
-
 // Peek: hold to get the full app while the phone is mounted.
 //
 // The orientation rule assumed you could rotate the device. The bedside one is fixed
@@ -1125,7 +1019,7 @@ $("widgetsReset").addEventListener("click", () => {
 // It always reverts. Without that the display quietly stops being a clock and you find
 // it in app mode at 3am.
 const PEEK_HOLD_MS = 600;
-const PEEK_TIMEOUT_MS = 30 * 1000;
+const PEEK_TIMEOUT_MS = S.peekSec * 1000;
 let peeking = false;
 let peekTimer = null;
 let pressTimer = null;
@@ -1134,7 +1028,7 @@ function applyBedsideMode(){
   const landscape = window.innerWidth > window.innerHeight;
   const on = bedsideParam !== null && landscape && !peeking;
   document.body.classList.toggle("bedside", on);
-  if (on) { clearHourDetail(); closeWidgets(); }
+  if (on) clearHourDetail();
   applyLayout();   // the two contexts have different widget sets
 }
 
