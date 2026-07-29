@@ -1,4 +1,4 @@
-const VERSION = "v86";
+const VERSION = "v87";
 const RETRY_MS = 60 * 1000;      // after a transient failure — not the full refresh interval
 
 // Everything tunable now lives in js/config.js and is edited on admin.html.

@@ -27,7 +27,7 @@
 /* Walk & Wear, in the Claude Apps icon family.
 
    Same construction as the "On Blue" handoff — squircle field, inset graphite card,
-   a glowing glyph and a pill below it. Two things differ on purpose:
+   a glowing glyph and a second, smaller mark below it. Two things differ on purpose:
 
    - The field is amber. Blue is the Dock launcher, teal is Remote In and green is Fix
      My Mail; a fourth cool colour would be indistinguishable from them at 32px, which
@@ -83,13 +83,36 @@ function icon(size, bleed) {
     + 'border-radius:50% 50% 46% 46% / 58% 58% 42% 42%;'
     + 'background:linear-gradient(180deg,#FFFFFF,#FFE3C2);'));
 
-  // The pill sits where the family puts its cursor bar, but reads as the hourly
-  // outlook strip — tinted with the app's own walk-ideal green.
-  sq.appendChild(el('left:50%;top:64%;width:24%;height:5%;border-radius:999px;'
-    + 'background:rgba(120,230,150,.5);'));
+  // A sun, in the slot where the family puts its cursor bar. Both halves of the name
+  // are now on the card — dog and weather — without the two competing: the paw keeps
+  // the hero position and full scale, the sun is secondary and sits on the opposite
+  // diagonal. Placing the sun any larger or any closer crowded the paw's outer toes
+  // and both shapes lost by 32px.
+  sun(sq, u, 62, 63, 9);
 
   canvas.appendChild(sq);
   return canvas;
+}
+
+/// A sun: solid disc plus eight radial pills. The rays have to be pills that point
+/// outward, not dots on a ring — as dots they stop reading as rays and collapse into
+/// a smudge at the small cuts.
+function sun(sq, u, cx, cy, r) {
+  const el = (css) => { const d = document.createElement('div'); d.style.cssText = 'position:absolute;' + css; return d; };
+  sq.appendChild(el('left:' + (cx - r * 1.5) + '%;top:' + (cy - r * 1.5) + '%;'
+    + 'width:' + r * 3 + '%;height:' + r * 3 + '%;border-radius:50%;'
+    + 'background:rgba(255,205,100,.45);filter:blur(' + 18 * u + 'px);'));
+  const L = r * 0.62, W = r * 0.30, rr = r * 0.86;
+  for (let i = 0; i < 8; i++) {
+    const a = i * Math.PI / 4;
+    const px = cx + Math.cos(a) * rr, py = cy + Math.sin(a) * rr;
+    sq.appendChild(el('left:' + (px - L / 2) + '%;top:' + (py - W / 2) + '%;'
+      + 'width:' + L + '%;height:' + W + '%;border-radius:999px;background:#FFE07A;'
+      + 'transform:rotate(' + (i * 45) + 'deg);'));
+  }
+  sq.appendChild(el('left:' + (cx - r * 0.52) + '%;top:' + (cy - r * 0.52) + '%;'
+    + 'width:' + r * 1.04 + '%;height:' + r * 1.04 + '%;border-radius:50%;'
+    + 'background:linear-gradient(180deg,#FFFDF4,#FFCF62);'));
 }
 
 const board = document.getElementById('board');
