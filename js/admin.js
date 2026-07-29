@@ -339,6 +339,57 @@ function describePollen(){
 }
 describePollen();
 
+/* Moving settings between addresses -----------------------------------------
+   localStorage is scoped to an origin, so putting the app behind HTTPS at
+   pi.tail1d9da7.ts.net/walk gave it a brand-new, empty store — the pinned location,
+   the widget layout and every preference stayed behind on http://100.84.97.17:8797.
+   The same applies between the phone and a laptop. This moves them.
+
+   The cached forecast is deliberately not included: it is derived data with a
+   timestamp, and carrying a stale one across would only delay the first refresh. */
+const MOVE_KEYS = [
+  "dashboard_layout", "dashboard_pin", "dashboard_zip", "dashboard_place",
+  "dashboard_keepAwake", "ww_settings", "ww_battWatch", "ww_battRoster",
+  "ww_sensorRoster",
+];
+
+document.getElementById("moveCopy").addEventListener("click", async () => {
+  const bundle = {};
+  MOVE_KEYS.forEach((k) => {
+    const v = localStorage.getItem(k);
+    if (v !== null) bundle[k] = v;
+  });
+  const text = JSON.stringify(bundle);
+  document.getElementById("moveBox").value = text;
+  try {
+    await navigator.clipboard.writeText(text);
+    flash(`Copied ${Object.keys(bundle).length} settings`);
+  } catch {
+    // Clipboard needs a secure context and permission; the textarea always works.
+    document.getElementById("moveBox").select();
+    flash("Select the text above and copy it");
+  }
+});
+
+document.getElementById("movePaste").addEventListener("click", () => {
+  const raw = document.getElementById("moveBox").value.trim();
+  if (!raw) { flash("Paste the settings text first"); return; }
+  let bundle;
+  try {
+    bundle = JSON.parse(raw);
+    if (!bundle || typeof bundle !== "object" || Array.isArray(bundle)) throw new Error();
+  } catch {
+    flash("That does not look like settings text");
+    return;
+  }
+  // Only keys this app owns, so a mistyped paste cannot write arbitrary storage.
+  const applied = Object.keys(bundle).filter((k) => MOVE_KEYS.includes(k));
+  if (!applied.length) { flash("No recognised settings in that text"); return; }
+  applied.forEach((k) => localStorage.setItem(k, String(bundle[k])));
+  flash(`Applied ${applied.length} settings — reopening`);
+  setTimeout(() => location.reload(), 700);
+});
+
 document.getElementById("clearCache").addEventListener("click", () => {
   localStorage.removeItem("dashboard_snapshot");
   describeData(); flash("Cache cleared");
