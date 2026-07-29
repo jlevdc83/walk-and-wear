@@ -3,3 +3,8 @@
 # Session transcript: contains home network detail (Pi tailnet address, LAN
 # subnet, MAC addresses, HOOBS layout). Keep it local — do not publish.
 session-export/
+
+# Dev-only tooling pulled in for one-off measurements (pngjs, playwright helpers).
+# Nothing here is a runtime dependency — the app is dependency-free by design.
+node_modules/
+package-lock.json
