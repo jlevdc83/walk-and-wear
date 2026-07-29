@@ -1,4 +1,4 @@
-const VERSION = "v77";
+const VERSION = "v78";
 const RETRY_MS = 60 * 1000;      // after a transient failure — not the full refresh interval
 
 // Everything tunable now lives in js/config.js and is edited on admin.html.
@@ -724,6 +724,52 @@ function render(forecast, loc, now){
    Each writes only if its element exists and it is switched on. Anything with no
    data says so plainly rather than showing an em dash, which reads as broken. */
 
+/* --- Indicators -----------------------------------------------------------
+   A glyph and a semantic tone per widget, so state reads before the text does.
+   Drawn inline rather than pulled from a font: SF Symbols is not licensed for the
+   web, and an icon font would be a download for nine shapes. They inherit
+   currentColor, so tone drives them without a second set. */
+
+const ICONS = {
+  lock:    '<path d="M6 10V7a4 4 0 0 1 8 0v3M4.5 10h11v8.5h-11z"/>',
+  unlock:  '<path d="M6 10V7a4 4 0 0 1 7.7-1.5M4.5 10h11v8.5h-11z"/>',
+  air:     '<path d="M3 8h9a2.6 2.6 0 1 0-2.6-2.6M3 12h12a2.6 2.6 0 1 1-2.6 2.6M3 16h6"/>',
+  droplet: '<path d="M10 3.5c3 3.6 5 6.1 5 8.4a5 5 0 0 1-10 0c0-2.3 2-4.8 5-8.4z"/>',
+  sunrise: '<path d="M10 3v4M4.6 9.2 7 10M15.4 9.2 13 10M2.5 16h15M6 16a4 4 0 0 1 8 0"/>',
+  sunset:  '<path d="M10 9V5M4.6 7.2 7 8M15.4 7.2 13 8M2.5 16h15M6 16a4 4 0 0 1 8 0"/>',
+  calendar:'<path d="M3.5 5.5h13V17h-13zM3.5 9h13M7 3.5v3M13 3.5v3"/>',
+  battery: '<path d="M2.5 7h12v6h-12zM16.5 9.5v1"/>',
+  leaf:    '<path d="M4 16C4 9 9 5 17 4c0 8-4 12-11 12zM4 16c2-3 5-5 8-6"/>',
+  gauge:   '<path d="M4 15a6.5 6.5 0 1 1 12 0M10 15l3.5-4"/>',
+};
+
+function icon(name, tone){
+  const d = ICONS[name];
+  if (!d) return "";
+  return `<svg viewBox="0 0 20 20" class="ico ${tone || ""}" fill="none" stroke="currentColor"
+    stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+}
+
+function setIcon(id, name, tone){
+  const el = $(`${id}Icon`);
+  if (el) el.innerHTML = icon(name, tone);
+}
+
+/// Tones map onto the system colours, so a glance lands before any reading.
+function toneFor(kind, value){
+  if (kind === "airQuality") {
+    const v = String(value || "").toLowerCase();
+    if (v.includes("excellent") || v.includes("good")) return "ok";
+    if (v.includes("fair")) return "mid";
+    if (v.includes("inferior") || v.includes("poor")) return "bad";
+    return "";
+  }
+  if (kind === "aqi") return value == null ? "" : value <= 50 ? "ok" : value <= 100 ? "mid" : "bad";
+  if (kind === "lock") return value === "locked" ? "ok" : value === "unlocked" ? "bad" : "mid";
+  if (kind === "battery") return value == null ? "" : value <= 20 ? "bad" : value <= 50 ? "mid" : "ok";
+  return "";
+}
+
 function setMini(id, value, sub){
   const v = $(`${id}Value`), s = $(`${id}Sub`);
   if (v) v.textContent = value;
@@ -735,6 +781,7 @@ function renderMinis({ h, d, idx, now, nextSun }){
   // way a percentage never conveys.
   const rh = h.relative_humidity_2m?.[idx];
   const dew = h.dewpoint_2m?.[idx];
+  setIcon("hum", "droplet");
   setMini("hum", rh == null ? "—" : `${round(rh)}%`,
     dew == null ? "outdoor" : `dew point ${round(dew)}°${S.units === "C" ? "C" : "F"}`);
 
@@ -742,11 +789,13 @@ function renderMinis({ h, d, idx, now, nextSun }){
   if (nextSun) {
     const mins = Math.max(0, Math.round((nextSun.time - now) / 60000));
     const when = mins < 60 ? `in ${mins}m` : `in ${Math.round(mins / 60)}h`;
+    setIcon("sun", nextSun.label === "Sunrise" ? "sunrise" : "sunset");
     setMini("sun", fmtShortTime(nextSun.time), `${nextSun.label.toLowerCase()} ${when}`);
   } else setMini("sun", "—", "");
 
   // Tomorrow, for deciding tonight.
   const thi = d.temperature_2m_max?.[1], tlo = d.temperature_2m_min?.[1];
+  setIcon("tom", "calendar");
   setMini("tom", thi == null ? "—" : `${round(thi)}° / ${round(tlo)}°`, "high / low");
 
   // Pollen: report the worst of the four rather than four numbers nobody reads.
@@ -763,7 +812,9 @@ function renderMinis({ h, d, idx, now, nextSun }){
       setMini("pollen", "no data", "Europe only — no free US source");
     }
 
+    setIcon("pollen", "leaf");
     const aqi = airData.us_aqi, pm = airData.pm2_5;
+    setIcon("aq", "gauge", toneFor("aqi", aqi));
     setMini("aq", aqi == null ? "—" : `AQI ${Math.round(aqi)}`,
       pm == null ? "" : `PM2.5 ${pm.toFixed(1)} µg/m³`);
   } else {
@@ -780,7 +831,32 @@ function renderHomeMinis(home){
     return;
   }
   const lock = (home.locks || [])[0];
+  const lockTone = toneFor("lock", lock && lock.state);
+  setIcon("lock", lock && lock.state === "unlocked" ? "unlock" : "lock", lockTone);
   setMini("lock", lock ? lock.state : "—", lock ? lock.name : "no lock found");
+
+  // The lock's own battery belongs on the lock, not buried among eighteen others.
+  //
+  // It must be the Schlage specifically. There are two devices named "Front Door" —
+  // the lock and a Ring contact sensor — plus a Ring keypad, and a door sensor's
+  // battery says nothing about whether the deadbolt will still throw. Prefer the
+  // pinned device, fall back to the only accessory whose HAP type is "lock", and
+  // never match on name.
+  const batts = home.batteries || [];
+  const lockBatt = batts.find((b) => devMatches(b, S.battPrimary) && b.type === "lock")
+                || batts.find((b) => b.type === "lock");
+  const pill = $("lockBatt");
+  if (pill) {
+    pill.classList.toggle("hidden", !lockBatt);
+    if (lockBatt) {
+      const lvl = typeof lockBatt.level === "number" ? Math.round(lockBatt.level) : null;
+      pill.className = `pill ${toneFor("battery", lvl)}`;
+      pill.title = `${lockBatt.name} (${lockBatt.type})`;   // so it can be checked
+      pill.innerHTML = `${icon("battery")}<span>${lvl == null ? "?" : lvl + "%"}</span>`;
+    }
+  }
+  const lockCard = document.querySelector('[data-widget="lock"]');
+  if (lockCard) lockCard.classList.toggle("warn", lockTone === "bad");
 
   // Both are arrays now. Cache the roster so the admin can offer the choice, and
   // honour the chosen sensor rather than whichever HOOBS listed first.
@@ -791,11 +867,13 @@ function renderHomeMinis(home){
   const pick = (list, name) => list.find((x) => x.name === name) || list[0] || null;
 
   const air = pick(airs, S.airSensor);
+  setIcon("inAir", "air", toneFor("airQuality", air && air.quality));
   setMini("inAir", air ? air.quality : "—",
     air ? (air.pm25 != null ? `${air.name} · PM2.5 ${air.pm25}` : air.name) : "no sensor");
 
   const hum = pick(hums, S.humiditySensor);
   const target = S.humidityTarget;
+  setIcon("inHum", "droplet", hum ? (hum.value < target ? "mid" : "ok") : "");
   setMini("inHum", hum ? `${Math.round(hum.value)}%` : "—",
     hum ? `${hum.value < target ? "below" : "at or above"} the ${target}% target` : "no sensor");
 
@@ -820,6 +898,7 @@ function renderHomeMinis(home){
 
   const card = document.querySelector('[data-widget="batteries"]');
   if (card) card.classList.toggle("warn", low.length > 0);
+  setIcon("batt", "battery", low.length ? "bad" : "ok");
 
   setMini("batt",
     low.length ? `${low.length} low` : (watched.length ? "all good" : "none watched"),
@@ -1119,7 +1198,13 @@ async function pollAlarm(){
 
     const state = typeof j.state === "string" ? j.state : "";
     const armed = state.startsWith("armed");
-    const wanted = S.dimOnArmed === "off" ? false
+    // Only a display that stays put should go dark because the house is armed.
+    // "Armed away" means the phone is in your pocket, so blacking out the app you
+    // are holding is exactly backwards — and it also hid the settings gear, which
+    // is how this was found. Bedside (or an explicitly kept-awake screen) only.
+    const stationary = bedsideParam !== null || keepAwake;
+    const wanted = !stationary ? false
+      : S.dimOnArmed === "off" ? false
       : S.dimOnArmed === "away" ? state === "armed (away)"
       : armed;
 

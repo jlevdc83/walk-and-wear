@@ -1242,3 +1242,31 @@ body.bedside .verdict { overflow-wrap: anywhere; }
 .battCompact.low { color: var(--sysOrange); }
 
 .battLine.pinned .battName::before, .battBar.pinned .battName::before { content: "◆ "; opacity: .6; }
+
+/* --- Widget indicators ---------------------------------------------------- */
+
+.miniHead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.miniIcon { display: inline-flex; flex: none; }
+.ico { width: 17px; height: 17px; color: var(--muted); }
+.ico.ok  { color: var(--sysGreen); }
+.ico.mid { color: var(--sysYellow); }
+.ico.bad { color: var(--sysRed); }
+
+/* A battery reading that belongs to one device, shown on that device. */
+.pill {
+  display: inline-flex; align-items: center; gap: 4px;
+  align-self: flex-start; margin-top: 7px;
+  padding: 3px 8px 3px 6px; border-radius: 99px;
+  font-family: var(--mono); font-size: var(--fs-floor); font-weight: 600;
+  background: var(--glass-rim-low); color: var(--muted);
+}
+.pill .ico { width: 13px; height: 13px; }
+.pill.ok  { color: var(--sysGreen); }
+.pill.mid { color: var(--sysYellow); }
+.pill.bad { color: var(--sysRed); background: color-mix(in srgb, var(--sysRed) 18%, transparent); }
+body.bedside .pill { display: none; }
+
+/* The gear is a link, not a scripted button: it survives a JS error, works with a
+   right-click, and cannot be orphaned by an edit elsewhere — which is exactly how
+   it broke, when removing the old inline panel took its listener with it. */
+a.widgetsBtn { text-decoration: none; display: inline-flex; align-items: center; }
