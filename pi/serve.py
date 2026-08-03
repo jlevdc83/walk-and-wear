@@ -33,6 +33,12 @@ ROOT = Path(__file__).resolve().parent.parent      # repo root: index.html, css/
 BIND = os.environ.get("WW_BIND", "100.84.97.17")
 PORT = int(os.environ.get("WW_PORT", "8797"))
 
+# Written by pi-services' parcels poller, read here. The file is the whole interface
+# between the two repos — this process never touches a mailbox and holds no credential.
+# The override is how the tile is developed locally, against pi/fixtures/.
+PARCELS_FILE = os.environ.get("WW_PARCELS_FILE",
+                              "/home/joshualevie/.local/state/parcels.json")
+
 HOOBS_URL = os.environ.get("HOOBS_URL", "http://127.0.0.1")
 HOOBS_USER = os.environ.get("HOOBS_USER", "")
 HOOBS_PASS = os.environ.get("HOOBS_PASS", "")
@@ -162,6 +168,20 @@ def home_state():
     return payload
 
 
+def parcels_state():
+    """The poller's file, byte for byte. No parsing, so the tile and the poller can
+    agree on a shape without this process being a third opinion about it.
+
+    A missing or unreadable file is 200 with ok:false, the same convention home_state
+    uses — the tile has to be able to tell "no feed here" (the public build, a 404)
+    from "the feed says there is nothing", and a 5xx would blur the two.
+    """
+    try:
+        return Path(PARCELS_FILE).read_bytes()
+    except Exception as exc:  # noqa: BLE001
+        return json.dumps({"ok": False, "error": str(exc)[:160], "at": time.time()}).encode()
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = "walk-and-wear/1.0"
 
@@ -171,6 +191,9 @@ class Handler(BaseHTTPRequestHandler):
         # /api/alarm kept as an alias so an older cached client keeps working.
         if path in ("/api/home", "/api/alarm"):
             return self._send(200, "application/json", json.dumps(home_state()).encode())
+
+        if path == "/api/parcels":
+            return self._send(200, "application/json", parcels_state())
 
         rel = "index.html" if path in ("/", "") else path.lstrip("/")
         target = (ROOT / rel).resolve()

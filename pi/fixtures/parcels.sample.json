@@ -1,0 +1,195 @@
+{
+  "ok": true,
+  "at": 1785758400,
+  "stale": false,
+  "parcels": [
+    {
+      "id": "amz-114-3921847-2210533",
+      "retailer": "Amazon",
+      "title": "Anker 737 charger",
+      "status": "out_for_delivery",
+      "stage": 2,
+      "eta": "2026-08-03",
+      "carrier": "UPS",
+      "tracking": "1Z999AA10123456784",
+      "class": "package",
+      "tier": null,
+      "updated": 1785751200
+    },
+    {
+      "id": "tgt-9182736450",
+      "retailer": "Target",
+      "title": "Kitchen towels, 2-pack",
+      "status": "shipped",
+      "stage": 1,
+      "eta": "2026-08-05",
+      "carrier": "USPS",
+      "tracking": "9400111899223197428490",
+      "class": "package",
+      "tier": null,
+      "updated": 1785686400
+    },
+    {
+      "id": "shop-allbirds-10482",
+      "retailer": "Allbirds",
+      "title": "Tree Runners",
+      "status": "ordered",
+      "stage": 0,
+      "eta": null,
+      "carrier": null,
+      "tracking": null,
+      "class": "package",
+      "tier": null,
+      "updated": 1785585600
+    },
+    {
+      "id": "bby-BBY01-806688776",
+      "retailer": "Best Buy",
+      "title": "Sonos Era 100",
+      "status": "exception",
+      "stage": 2,
+      "eta": "2026-08-02",
+      "carrier": "FedEx",
+      "tracking": "770123456789",
+      "class": "package",
+      "tier": "alert",
+      "reason": "Delivery attempt failed — reschedule with FedEx",
+      "since": 1785693600,
+      "updated": 1785693600
+    },
+    {
+      "id": "amz-114-8820394-7746112",
+      "retailer": "Amazon",
+      "title": "USB-C cable, 3-pack",
+      "status": "delivered",
+      "stage": 3,
+      "eta": "2026-08-02",
+      "carrier": "UPS",
+      "tracking": "1Z999AA10987654321",
+      "class": "package",
+      "tier": null,
+      "updated": 1785664800
+    },
+    {
+      "id": "instacart-77412",
+      "retailer": "Instacart",
+      "title": "Grocery order, 24 items",
+      "status": "out_for_delivery",
+      "stage": 2,
+      "eta": "2026-08-03",
+      "carrier": null,
+      "tracking": null,
+      "class": "grocery",
+      "tier": null,
+      "updated": 1785756900
+    },
+    {
+      "id": "wfm-30021",
+      "retailer": "Whole Foods",
+      "title": "Grocery order, 6 items",
+      "status": "delivered",
+      "stage": 3,
+      "eta": "2026-08-03",
+      "carrier": null,
+      "tracking": null,
+      "class": "grocery",
+      "tier": null,
+      "updated": 1785756000
+    },
+    {
+      "id": "fresh-88104",
+      "retailer": "Amazon Fresh",
+      "title": "Grocery order, 11 items",
+      "status": "delivered",
+      "stage": 3,
+      "eta": "2026-08-03",
+      "carrier": null,
+      "tracking": null,
+      "class": "grocery",
+      "tier": null,
+      "updated": 1785740400
+    }
+  ],
+  "returns": [
+    {
+      "id": "amz-ret-114-2277318-9043221",
+      "retailer": "Amazon",
+      "title": "Brooks Ghost 15, size 11",
+      "status": "retrocharged",
+      "stage": 4,
+      "amount": 84.32,
+      "tier": "alert",
+      "reason": "Amazon re-charged you — contact Amazon",
+      "since": 1785412800,
+      "updated": 1785412800
+    },
+    {
+      "id": "tgt-ret-4471028836",
+      "retailer": "Target",
+      "title": "Baratza coffee grinder",
+      "status": "received",
+      "stage": 2,
+      "amount": 129.99,
+      "tier": null,
+      "since": 1784289600,
+      "updated": 1784289600
+    },
+    {
+      "id": "amz-ret-114-5590127-3318804",
+      "retailer": "Amazon",
+      "title": "Linen lamp shade",
+      "status": "started",
+      "stage": 0,
+      "amount": 42.0,
+      "expires": "2026-08-05",
+      "tier": null,
+      "since": 1785499200,
+      "updated": 1785499200
+    },
+    {
+      "id": "rei-ret-2210044",
+      "retailer": "REI",
+      "title": "Rain shell",
+      "status": "sent_back",
+      "stage": 1,
+      "amount": 118.95,
+      "tier": null,
+      "since": 1784980800,
+      "updated": 1784980800
+    },
+    {
+      "id": "shop-quince-ret-55120",
+      "retailer": "Quince",
+      "title": "Linen sheet set",
+      "status": "refunded",
+      "stage": 3,
+      "amount": 62.0,
+      "tier": null,
+      "since": 1784721600,
+      "updated": 1784721600
+    },
+    {
+      "id": "amz-ret-114-7712004-6650318",
+      "retailer": "Amazon",
+      "title": "Electric kettle",
+      "status": "settled",
+      "stage": 4,
+      "amount": 39.99,
+      "tier": null,
+      "since": 1785240000,
+      "updated": 1785240000
+    }
+  ],
+  "unmatched": [
+    {
+      "from": "no-reply@shopifyemail.com",
+      "subject": "Thanks for your order! (#10482)",
+      "at": "2026-08-01T18:22:04Z"
+    },
+    {
+      "from": "leviej@gmail.com",
+      "subject": "Fwd: Your package is running late",
+      "at": "2026-08-02T09:41:36Z"
+    }
+  ]
+}

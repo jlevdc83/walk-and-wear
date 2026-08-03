@@ -192,6 +192,54 @@ async function renderHome(){
   }
 }
 
+/* --- Packages -------------------------------------------------------------
+   The same live-readout idea as Home, and for the same reason — but this one also
+   prints what the parser could not classify. That list is the tuning loop for the
+   Gmail filters and the subject regexes: mail that lands in `unmatched` is mail the
+   tile silently dropped, and you cannot fix what you cannot see. */
+
+async function renderParcels(){
+  const note = document.getElementById("parcelNote");
+  const unNote = document.getElementById("parcelUnmatchedNote");
+  const ul = document.getElementById("parcelUnmatched");
+  ul.innerHTML = "";
+  unNote.hidden = true;
+
+  let j;
+  try {
+    const r = await fetch("api/parcels", { cache: "no-store" });
+    if (!r.ok) throw new Error("no feed");
+    j = await r.json();
+  } catch {
+    note.textContent = "Not the Pi build — open this from the Pi URL to see the feed.";
+    return;
+  }
+  if (!j.ok) {
+    note.textContent = `Pi reachable but no parcel data: ${j.error || "unknown error"}`;
+    return;
+  }
+
+  const parcels = j.parcels || [], returns = j.returns || [], un = j.unmatched || [];
+  const alerts = [...parcels, ...returns].filter((x) => x.tier === "alert").length;
+  const mins = typeof j.at === "number" ? Math.round((Date.now() - j.at * 1000) / 60000) : null;
+  note.textContent =
+    `${parcels.length} package${parcels.length === 1 ? "" : "s"}, ${returns.length} return${returns.length === 1 ? "" : "s"}`
+    + (alerts ? `, ${alerts} flagged` : "")
+    + (mins == null ? "" : ` · updated ${mins < 1 ? "just now" : `${mins} min ago`}`)
+    + (j.stale ? ` · stale: ${j.error || "the mailbox was unreachable"}` : "");
+
+  if (!un.length) return;
+  unNote.hidden = false;
+  unNote.textContent = `${un.length} message${un.length === 1 ? "" : "s"} the parser could not place. `
+    + "Each one is either a filter to widen or a subject pattern to add.";
+  ul.innerHTML = un.map((m) => `<li class="widgetRow">
+    <span class="widgetPick">
+      <span class="widgetName">${esc(m.subject || "(no subject)")}</span>
+      <span class="widgetNote">${esc(m.from || "unknown sender")}${m.at ? ` · ${esc(m.at)}` : ""}</span>
+    </span>
+  </li>`).join("");
+}
+
 /* --- Indoor sensors ------------------------------------------------------- */
 
 function renderSensors(){
@@ -350,7 +398,9 @@ describePollen();
 const MOVE_KEYS = [
   "dashboard_layout", "dashboard_pin", "dashboard_zip", "dashboard_place",
   "dashboard_keepAwake", "ww_settings", "ww_battWatch", "ww_battRoster",
-  "ww_sensorRoster",
+  // Without these two, an acknowledged retrocharge comes back from the dead and every
+  // hand-typed package is lost the moment the settings move to another address.
+  "ww_sensorRoster", "ww_parcelState", "ww_parcelManual",
 ];
 
 document.getElementById("moveCopy").addEventListener("click", async () => {
@@ -407,7 +457,7 @@ document.getElementById("resetAll").addEventListener("click", () => {
    "dashboard_snapshot", "dashboard_keepAwake"].forEach((k) => localStorage.removeItem(k));
   S = loadSettings();
   layout = loadLayout();
-  bindFields(); renderLists(); applyMaskVars(S); renderMask(); describeData(); renderBatteries(); renderSensors(); renderHome();
+  bindFields(); renderLists(); applyMaskVars(S); renderMask(); describeData(); renderBatteries(); renderSensors(); renderHome(); renderParcels();
   flash("Reset");
 });
 
@@ -419,6 +469,7 @@ describeData();
 renderBatteries();
 renderSensors();
 renderHome();
+renderParcels();
 // Materialise the current layout on open. Until something is changed it exists only
 // as defaults in memory, so nothing has actually been written down — which makes the
 // stored state a surprise rather than a record.

@@ -1,4 +1,4 @@
-const VERSION = "v93";
+const VERSION = "v94";
 const RETRY_MS = 60 * 1000;      // after a transient failure — not the full refresh interval
 
 // Everything tunable now lives in js/config.js and is edited on admin.html.
@@ -1395,6 +1395,537 @@ function startAlarmFeed(){
   });
 }
 
+/* --- Packages (Pi build only) --------------------------------------------
+   Deliveries and returns, parsed out of forwarded order mail by the poller in
+   pi-services and served here as a file. The tile's job is the part the email
+   cannot do: notice when something has stopped moving.
+
+   Its own poller rather than a rider on the 15s alarm poll — the feed is rewritten
+   every ten minutes at most, and asking a hundred times an hour for a file that
+   changes six times would be rude to nothing but the battery. Gated on the layout
+   the same way the air-quality fetch is: nobody pays for a call they cannot see. */
+
+const PARCEL_POLL_MS = 5 * 60 * 1000;
+const PARCEL_STATE_KEY = "ww_parcelState";
+const PARCEL_MANUAL_KEY = "ww_parcelManual";
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+// The two ladders. Both move forward only; `exception` and `retrocharged` arrive from
+// the side and always win, which is why they are statuses rather than rungs — and why
+// the rung maps are derived from the ladders rather than written out twice.
+const PARCEL_STAGES = ["Ordered", "Shipped", "Out for delivery", "Delivered"];
+const RETURN_STAGES = ["Started", "Sent back", "Received", "Refunded", "Settled"];
+const PARCEL_STATUSES = ["ordered", "shipped", "out_for_delivery", "delivered"];
+const RETURN_STATUSES = ["started", "sent_back", "received", "refunded", "settled"];
+const rungs = (list, sideways) =>
+  ({ ...Object.fromEntries(list.map((s, i) => [s, i])), ...sideways });
+const PARCEL_STAGE_OF = rungs(PARCEL_STATUSES, { exception: 2 });
+const RETURN_STAGE_OF = rungs(RETURN_STATUSES, { retrocharged: 4 });
+const TIER_RANK = { watch: 1, alert: 2 };
+
+let parcelTimer = null;
+let lastParcels = null;   // acknowledging re-renders from this rather than re-fetching
+
+/// Acknowledgements and hand-marked settlements. Local, because they are a record of
+/// what *you* did about a record, not something the mailbox can know.
+function loadParcelState(){
+  try { return JSON.parse(localStorage.getItem(PARCEL_STATE_KEY) || "{}") || {}; }
+  catch { return {}; }
+}
+function saveParcelState(state){
+  try { localStorage.setItem(PARCEL_STATE_KEY, JSON.stringify(state)); } catch { /* private mode */ }
+}
+
+/// Packages typed in by hand. The mailbox only ever knows what a retailer chose to
+/// send, so an order placed by phone, a counter purchase shipping later, or a
+/// confirmation that never arrived would otherwise be invisible — and a tile that
+/// silently under-reports is the failure this widget exists to prevent.
+function loadManualParcels(){
+  try {
+    const all = JSON.parse(localStorage.getItem(PARCEL_MANUAL_KEY) || "{}");
+    return all && typeof all === "object" && !Array.isArray(all) ? all : {};
+  } catch { return {}; }
+}
+function saveManualParcels(all){
+  try { localStorage.setItem(PARCEL_MANUAL_KEY, JSON.stringify(all)); } catch { /* private mode */ }
+}
+
+/// Carriers write the same number with spaces, and in either case.
+function trackKey(t){ return String(t || "").replace(/\s+/g, "").toUpperCase(); }
+
+// The Pi writes seconds, like everything else it serves.
+function parcelTime(t){ return typeof t === "number" ? t * 1000 : null; }
+function daysSince(ms, now){ return ms == null ? null : Math.floor((now - ms) / DAY_MS); }
+function daysUntil(iso, now){
+  if (!iso) return null;
+  const t = Date.parse(`${iso}T00:00:00`);
+  return Number.isFinite(t) ? Math.ceil((t - now) / DAY_MS) : null;
+}
+function isoDay(ms){
+  const d = new Date(ms);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+/// Feed reasons read "Amazon re-charged you — contact Amazon": the clause before the
+/// dash is the headline, the whole line is the explanation.
+function shortReason(r){ return String(r || "").split("—")[0].trim(); }
+
+/// The alert table, run against each record's own clock. The poller may already have
+/// set a tier — it sees subjects the tile never will — so the stronger of the two
+/// wins, and the thresholds stay settings rather than constants.
+function parcelAlert(it, now){
+  const age = daysSince(it.since ?? it.updated, now);
+  const who = it.retailer || "The retailer";
+
+  if (it.kind === "return") {
+    if (it.status === "retrocharged")
+      return { tier: "alert", headline: `${who} re-charged you`, detail: "Refund reversed — contact them" };
+    if (it.status === "received" && age != null && age >= S.parcelRefundDays)
+      return { tier: "alert", headline: "Refund not received", detail: `${who} has had it ${age} days` };
+    if (it.status === "started" && it.expiresIn != null && it.expiresIn <= S.parcelLabelDays)
+      return { tier: "alert", headline: "Return label expiring",
+               detail: it.expiresIn <= 0 ? `The ${who} label has expired` : `The ${who} label expires in ${it.expiresIn} d` };
+    if (it.status === "sent_back" && age != null && age >= S.parcelScanDays)
+      return { tier: "watch", headline: "No receive scan", detail: `Sent back ${age} days ago` };
+    if (it.status === "refunded" && age != null && age >= S.parcelSettleDays)
+      return { tier: "watch", headline: "Refund not posted", detail: `Refunded ${age} days ago` };
+    return { tier: null };
+  }
+
+  const hours = it.since == null ? 0 : (now - it.since) / 3600000;
+  if (it.status === "exception" && hours >= S.parcelExceptionHours)
+    return { tier: "alert", headline: `${who} delivery failed`,
+             detail: `${it.carrier || "The carrier"} could not deliver — needs action today` };
+  return { tier: null };
+}
+
+/// One record, in the shape the rest of this file wants: dates in ms, a stage that
+/// agrees with its own status, and the tier already decided.
+function normaliseParcel(p, kind, state, now){
+  const stages = kind === "return" ? RETURN_STAGES : PARCEL_STAGES;
+  const map = kind === "return" ? RETURN_STAGE_OF : PARCEL_STAGE_OF;
+  const manual = state[p.id] || {};
+
+  // Marking a return settled by hand is the fallback route to the last stage — the
+  // one that runs when no card alert could ever close it.
+  const status = (kind === "return" && manual.settled && p.status !== "retrocharged")
+    ? "settled" : String(p.status || "");
+
+  const it = {
+    id: p.id, kind, status, retailer: p.retailer || "", title: p.title || "",
+    carrier: p.carrier || "", tracking: p.tracking || "", trackKey: trackKey(p.tracking),
+    amount: p.amount ?? null,
+    // Every status but one names its own rung, so the rung is re-derived rather than
+    // trusted — a mis-stamped record cannot then draw a chevron that disagrees with
+    // itself. `exception` is the exception: it arrives from the side, at any rung, so
+    // there the feed's stage is the only thing that knows where it happened.
+    stage: (status === "exception" && typeof p.stage === "number") ? p.stage : (map[status] ?? 0),
+    stages,
+    since: parcelTime(p.since) ?? parcelTime(p.updated),
+    updated: parcelTime(p.updated) ?? parcelTime(p.since),
+    eta: p.eta || null,
+    expiresIn: daysUntil(p.expires, now),
+    ack: !!manual.ack,
+  };
+  it.arrivingToday = kind !== "return" && it.eta === isoDay(now) && status !== "delivered";
+
+  const feed = TIER_RANK[p.tier] ? p.tier : null;
+  const found = parcelAlert(it, now);
+  it.tier = (TIER_RANK[feed] || 0) >= (TIER_RANK[found.tier] || 0) ? feed : found.tier;
+  if (it.tier) {
+    it.headline = found.headline || shortReason(p.reason) || "Needs attention";
+    it.detail = found.detail || p.reason || "";
+  }
+  it.tone = it.tier === "alert" ? "bad" : it.tier === "watch" ? "mid"
+    : (status === "delivered" || status === "settled") ? "ok" : "";
+  it.glyph = it.tier === "alert" ? "alert"
+    : kind === "return" ? "returnArrow"
+    : (status === "shipped" || status === "out_for_delivery") ? "truck" : "box";
+  return it;
+}
+
+/// Alerts, then what arrives today, then what is moving, then open returns, then
+/// groceries, then what has already landed. Grocery sorts last on purpose: a dozen
+/// orders with a lifecycle measured in minutes would otherwise bury a real package.
+function parcelRank(it){
+  if (it.tier === "alert" && !it.ack) return 0;
+  if (it.kind === "return") return it.status === "settled" ? 5 : 3;
+  if (it.class === "grocery") return it.status === "delivered" ? 5 : 4;
+  if (it.status === "delivered") return 5;
+  if (it.arrivingToday) return 1;
+  return 2;
+}
+
+/// Alerts are not interchangeable, and the top one takes the headline. Money already
+/// taken back outranks money still owed, which outranks a parcel that can be
+/// redelivered tomorrow — a retrocharge has to beat a missed doorstep.
+function alertWeight(it){
+  if (it.tier !== "alert" || it.ack) return 0;
+  return it.status === "retrocharged" ? 0 : it.kind === "return" ? 1 : 2;
+}
+
+function parcelItems(j, now){
+  const state = loadParcelState();
+  const feed = j || {};
+  const packages = (feed.parcels || []).map((p) => {
+    const it = normaliseParcel(p, "package", state, now);
+    it.class = p.class === "grocery" ? "grocery" : "package";
+    return it;
+  });
+  const returns = S.parcelShowReturns
+    ? (feed.returns || []).map((r) => normaliseParcel(r, "return", state, now))
+    : [];
+  const fromFeed = [...packages, ...returns];
+
+  // Hand-typed entries, merged in by tracking number — the one identity both sides can
+  // agree on. The moment the carrier's mail arrives, the typed row stops being a second
+  // copy of the same parcel and becomes the feed's, which is the whole reason to type a
+  // tracking number in. The feed's status wins because it is the one that updates
+  // itself; the typed title survives if the feed never had one.
+  //
+  // The manual record is never deleted by a merge. When the feed entry ages out of
+  // retention, the thing you tracked by hand should not go with it.
+  const claimed = new Map(fromFeed.filter((it) => it.trackKey).map((it) => [it.trackKey, it]));
+  const manual = [];
+  for (const m of Object.values(loadManualParcels())) {
+    const kind = m.kind === "return" ? "return" : "package";
+    if (kind === "return" && !S.parcelShowReturns) continue;
+    const twin = m.tracking ? claimed.get(trackKey(m.tracking)) : null;
+    if (twin) {
+      twin.manualId = m.id;                    // edit and delete still reach the record
+      if (!twin.title) twin.title = m.title;
+      continue;
+    }
+    // No tracking number means nothing can ever claim it: it stays yours, and its stage
+    // moves only when you move it.
+    const it = normaliseParcel({ ...m, since: m.since || m.updated || m.created,
+                                 updated: m.updated || m.created }, kind, state, now);
+    if (kind !== "return") it.class = "package";
+    it.manual = true;
+    it.manualId = m.id;
+    manual.push(it);
+  }
+
+  return [...fromFeed, ...manual].filter((it) => {
+    if (it.class === "grocery") {
+      if (!S.parcelShowGrocery) return false;
+      // A delivered grocery order is news for about as long as it takes to unpack it.
+      if (it.status === "delivered" && (now - it.updated) > S.parcelGroceryHours * 3600000) return false;
+    }
+    // An alert never ages out — a refund that went missing should not quietly stop
+    // being missing because three weeks passed. Neither does anything you typed in:
+    // you put it there, so you are the one who takes it away.
+    if (it.tier === "alert" || it.manual) return true;
+    return it.updated == null || (now - it.updated) <= S.parcelDays * DAY_MS;
+  }).sort((a, b) => {
+    const r = parcelRank(a) - parcelRank(b);
+    if (r !== 0) return r;
+    const w = alertWeight(a) - alertWeight(b);
+    return w !== 0 ? w : (b.updated || 0) - (a.updated || 0);
+  });
+}
+
+/// What each row says on its right-hand side: for a package, when it lands; for a
+/// return, how much money is waiting on it.
+function parcelMeta(it, now){
+  const word = it.status === "exception" ? "Exception"
+    : it.status === "retrocharged" ? "Retrocharged"
+    : it.stages[it.stage] || sentence(it.status.replace(/_/g, " "));
+  if (it.kind === "return") {
+    return it.amount == null ? word : `$${Number(it.amount).toFixed(2)} · ${word}`;
+  }
+  if (it.arrivingToday) return "Today";
+  const days = daysUntil(it.eta, now);
+  if (days != null && days > 0 && days <= 6) {
+    const when = days === 1 ? "Tomorrow"
+      : new Intl.DateTimeFormat([], { weekday: "short" }).format(Date.parse(`${it.eta}T12:00:00`));
+    return `${when} · ${word}`;
+  }
+  return word;
+}
+
+function parcelChevron(it){
+  return vizChevron(it.stages, it.stage, it.tone, {
+    reversed: it.status === "retrocharged",
+    label: it.status === "exception" ? "Delivery problem" : null,
+  });
+}
+
+/// Three ways to draw the same list. Compact gives it up and answers only "is anything
+/// wrong"; list is the glance; full is the one you can act on — the buttons live there
+/// alone, so nothing on a glance view competes with the long-press peek.
+function renderParcelBody(mode, items, now){
+  if (!items.length) return "";
+
+  if (mode === "compact") {
+    const next = items.find((it) => it.kind !== "return" && it.status !== "delivered");
+    const alerts = items.filter((it) => it.tier === "alert" && !it.ack);
+    return `<span class="parcelCompact${alerts.length ? " alert" : ""}">${
+      alerts.length ? esc(alerts[0].detail || alerts[0].headline)
+      : next ? `Next: ${esc(next.title)} · ${esc(parcelMeta(next, now))}`
+      : `${items.length} tracked`
+    }</span>`;
+  }
+
+  if (mode === "list") {
+    return items.slice(0, 4).map((it) => `<span class="parcelLine ${it.tier || ""}${it.ack ? " acked" : ""}">
+      <span class="devIcon">${icon(it.glyph, it.tone)}</span>
+      <span class="parcelName">${esc(it.title || it.retailer)}</span>
+      <span class="parcelMeta">${esc(parcelMeta(it, now))}</span>
+    </span>`).join("");
+  }
+
+  // full
+  return items.slice(0, 6).map((it) => {
+    const acts = [];
+    if (it.tier) acts.push(`<button class="parcelAct${it.ack ? " on" : ""}" type="button"
+        data-parcel="${esc(it.id)}" data-act="ack" aria-pressed="${it.ack}">${
+        it.ack ? "Acknowledged" : "Acknowledge"}</button>`);
+    if (it.kind === "return" && it.status !== "retrocharged") {
+      const done = it.status === "settled";
+      acts.push(`<button class="parcelAct${done ? " on" : ""}" type="button"
+        data-parcel="${esc(it.id)}" data-act="settled" aria-pressed="${done}">${
+        done ? "Settled" : "Mark settled"}</button>`);
+    }
+    // A hand-typed record is the only thing here that can be rewritten, so it is the
+    // only thing that gets these two. Deleting one that has merged with the feed
+    // removes what you typed and leaves the parcel.
+    if (it.manualId) {
+      acts.push(`<button class="parcelAct" type="button"
+        data-parcel="${esc(it.manualId)}" data-act="edit">Edit</button>`);
+      acts.push(`<button class="parcelAct" type="button"
+        data-parcel="${esc(it.manualId)}" data-act="delete">Delete</button>`);
+    }
+    return `<div class="parcelRow ${it.tier || ""}${it.ack ? " acked" : ""}">
+      <span class="parcelLine">
+        <span class="devIcon">${icon(it.glyph, it.tone)}</span>
+        <span class="parcelName">${esc(it.title || it.retailer)}</span>
+        <span class="parcelMeta">${esc(parcelMeta(it, now))}</span>
+      </span>
+      ${parcelChevron(it)}
+      ${it.tier ? `<span class="parcelWhy">${esc(it.detail || it.headline)}</span>` : ""}
+      ${acts.length ? `<span class="parcelActs">${acts.join("")}</span>` : ""}
+    </div>`;
+  }).join("");
+}
+
+function renderParcels(j){
+  const card = document.querySelector('[data-widget="parcels"]');
+  const rows = $("parcelRows");
+  const add = $("parcelAdd");
+  // Compact is a glance, and a tap target there would be fighting the long-press peek.
+  if (add) add.classList.toggle("hidden", S.parcelDisplay === "compact");
+
+  // A dead feed is not an empty tile: whatever was typed in by hand is still tracked,
+  // and on the public build that is the only thing this widget ever has.
+  const feed = j && j.ok ? j : null;
+  if (feed) lastParcels = feed;
+
+  const now = Date.now();
+  const items = parcelItems(feed, now);
+
+  if (!feed && !items.length) {
+    if (card) card.classList.remove("warn");
+    setIcon("parcels", "box");
+    setMini("parcels", "—", j && j.error ? "Feed unreadable on the Pi" : "Needs the Pi build");
+    if (rows) rows.innerHTML = "";
+    setViz("parcels", "");
+    return;
+  }
+  const alerts = items.filter((it) => it.tier === "alert" && !it.ack);
+  const today = items.filter((it) => it.arrivingToday);
+  const moving = items.filter((it) => it.kind !== "return" && it.status !== "delivered");
+  const open = items.filter((it) => it.kind === "return" && it.status !== "settled");
+
+  // Any alert wins the headline. "Amazon re-charged you" is worth more than a count
+  // of what happens to be arriving, every time.
+  let value, sub;
+  if (alerts.length) {
+    value = alerts[0].headline;
+    sub = alerts.length > 1 ? `${alerts[0].detail} · ${alerts.length - 1} more to deal with`
+                            : alerts[0].detail;
+  } else if (today.length) {
+    value = `${today.length} arriving today`;
+    sub = open.length ? `${open.length} return${open.length === 1 ? "" : "s"} open` : "Nothing else waiting";
+  } else if (moving.length) {
+    value = `${moving.length} on the way`;
+    sub = open.length ? `${open.length} return${open.length === 1 ? "" : "s"} open` : "No open returns";
+  } else {
+    value = "Nothing on the way";
+    sub = open.length ? `${open.length} return${open.length === 1 ? "" : "s"} open` : "No open returns";
+  }
+
+  // Stale means the mailbox was unreachable, not that the packages vanished. Say how
+  // old it is and keep showing it — the same honesty the cached forecast practises.
+  if (feed && feed.stale) {
+    const mins = Math.max(0, Math.round((now - (parcelTime(feed.at) || now)) / 60000));
+    sub = `${sub} · feed ${mins < 60 ? `${mins} min` : `${Math.round(mins / 60)}h`} old`;
+  }
+  if (!feed) sub = `${sub} · hand-tracked only`;
+
+  setIcon("parcels", alerts.length ? "alert" : moving.length ? "truck" : open.length ? "returnArrow" : "box",
+    alerts.length ? "bad" : "");
+  setMini("parcels", value, sub);
+  if (card) card.classList.toggle("warn", alerts.length > 0);
+
+  const lead = alerts[0] || today[0] || moving[0] || open[0] || items[0] || null;
+  setViz("parcels", lead ? vizPick(S.vizStyle, {
+    auto: parcelChevron(lead),
+    bars: vizBar((lead.stage + 1) / lead.stages.length, lead.tone),
+  }) : "");
+
+  if (rows) {
+    rows.className = `parcelRows mode-${S.parcelDisplay}`;
+    rows.innerHTML = renderParcelBody(S.parcelDisplay, items, now);
+  }
+  // The tile takes the size its chosen display needs, the way batteries does.
+  if (card) {
+    const size = S.parcelDisplay === "compact" ? "w-small"
+      : S.parcelDisplay === "full" ? "w-large"
+      : "w-medium";
+    card.classList.remove("w-small", "w-medium", "w-large");
+    card.classList.add(size);
+  }
+}
+
+/// Skipped entirely when the tile is not in the current context's layout — the same
+/// rule fetchAir follows, and the reason this poller costs nothing on the bedside face.
+function parcelsWanted(){
+  return (layout[currentContext()] || []).includes("parcels");
+}
+
+async function pollParcels(){
+  if (!parcelsWanted()) return;
+  try {
+    const r = await fetch("api/parcels", { cache: "no-store" });
+    if (!r.ok) throw new Error("NO_FEED");
+    renderParcels(await r.json());
+  } catch {
+    renderParcels(null);   // public build, or the Pi is unreachable
+  }
+}
+
+function startParcelFeed(){
+  clearInterval(parcelTimer);
+  pollParcels();
+  parcelTimer = setInterval(pollParcels, PARCEL_POLL_MS);
+}
+
+// Buttons exist only in the full display, so this listener only ever finds one there.
+$("parcelRows")?.addEventListener("click", (e) => {
+  const btn = e.target.closest("button[data-act]");
+  if (!btn) return;
+  const id = btn.dataset.parcel, act = btn.dataset.act;
+
+  if (act === "edit") return openParcelForm(id);
+  if (act === "delete") {
+    if (!confirm("Stop tracking this? Anything the mail knows about it stays.")) return;
+    const all = loadManualParcels();
+    delete all[id];
+    saveManualParcels(all);
+    return renderParcels(lastParcels);
+  }
+
+  const state = loadParcelState();
+  const rec = state[id] || {};
+  rec[act] = !rec[act];
+  state[id] = rec;
+  saveParcelState(state);
+  renderParcels(lastParcels);
+});
+
+/* The add / edit form. Deliberately the locate card's shape rather than a second
+   overlay idiom: this app asks its questions with a glass card that takes the screen,
+   because window.prompt() is suppressed in an iOS standalone PWA and one modal
+   mechanism is enough to keep working. */
+
+let editingParcel = null;   // the manual id being edited, or null for a new one
+
+function fillStagePicker(kind, status){
+  const list = kind === "return" ? RETURN_STATUSES : PARCEL_STATUSES;
+  const labels = kind === "return" ? RETURN_STAGES : PARCEL_STAGES;
+  const chosen = list.includes(status) ? status : list[0];
+  $("pfStage").innerHTML = list.map((s, i) =>
+    `<option value="${s}"${s === chosen ? " selected" : ""}>${labels[i]}</option>`).join("");
+}
+
+/// Type decides both which ladder the stage picker offers and whether there is an
+/// amount to ask for — only a return has money owed back.
+function syncParcelForm(){
+  const kind = $("pfKind").value === "return" ? "return" : "package";
+  $("pfAmountRow").classList.toggle("hidden", kind !== "return");
+  fillStagePicker(kind, $("pfStage").value);
+}
+
+function openParcelForm(id){
+  const rec = id ? loadManualParcels()[id] : null;
+  editingParcel = rec ? rec.id : null;
+
+  $("parcelFormTitle").textContent = rec ? "Edit this one" : "Track something";
+  $("pfTitle").value = rec ? rec.title || "" : "";
+  $("pfRetailer").value = rec ? rec.retailer || "" : "";
+  $("pfKind").value = rec && rec.kind === "return" ? "return" : "package";
+  $("pfCarrier").value = rec ? rec.carrier || "" : "";
+  $("pfTracking").value = rec ? rec.tracking || "" : "";
+  $("pfEta").value = rec ? rec.eta || "" : "";
+  $("pfAmount").value = rec && rec.amount != null ? rec.amount : "";
+  fillStagePicker($("pfKind").value, rec ? rec.status : null);
+  $("pfAmountRow").classList.toggle("hidden", $("pfKind").value !== "return");
+
+  $("parcelFormCard").classList.remove("hidden");
+  $("decisions").classList.add("hidden");
+  $("weather").classList.add("hidden");
+  $("pfTitle").focus();
+}
+
+function closeParcelForm(){
+  $("parcelFormCard").classList.add("hidden");
+  $("decisions").classList.remove("hidden");
+  $("weather").classList.remove("hidden");
+  editingParcel = null;
+}
+
+$("parcelAdd")?.addEventListener("click", () => openParcelForm(null));
+// The whole card body is a long-press peek target; this corner is not.
+$("parcelAdd")?.addEventListener("pointerdown", (e) => e.stopPropagation());
+$("pfCancel")?.addEventListener("click", closeParcelForm);
+$("pfKind")?.addEventListener("change", syncParcelForm);
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && !$("parcelFormCard")?.classList.contains("hidden")) closeParcelForm();
+});
+
+$("parcelEntry")?.addEventListener("submit", (e) => {
+  e.preventDefault();
+  const title = $("pfTitle").value.trim();
+  if (!title) { $("pfTitle").focus(); return; }   // the only thing worth refusing
+
+  const all = loadManualParcels();
+  const id = editingParcel
+    || `manual-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+  const prev = all[id] || {};
+  const kind = $("pfKind").value === "return" ? "return" : "package";
+  const status = $("pfStage").value;
+  const amount = Number($("pfAmount").value);
+  const secs = Math.round(Date.now() / 1000);
+
+  all[id] = {
+    id, kind, title, status,
+    retailer: $("pfRetailer").value.trim(),
+    carrier: $("pfCarrier").value.trim(),
+    tracking: $("pfTracking").value.trim(),
+    eta: $("pfEta").value || null,
+    amount: kind === "return" && Number.isFinite(amount) && amount > 0 ? amount : null,
+    manual: true,
+    created: prev.created || secs,
+    updated: secs,
+    // The stall clocks run from the moment a stage was reached, so moving a return to
+    // "Received" by hand is exactly when its fourteen days should start counting.
+    since: prev.status === status ? (prev.since || secs) : secs,
+  };
+  saveManualParcels(all);
+  closeParcelForm();
+  renderParcels(lastParcels);
+});
+
 $("awakeBtn").addEventListener("click", async () => {
   keepAwake = !keepAwake;
   localStorage.setItem("dashboard_keepAwake", String(keepAwake));
@@ -1563,6 +2094,7 @@ updateClock();
 startTickers();
 syncAwakeButton();
 startAlarmFeed();
+startParcelFeed();
 if (keepAwake) { acquireWakeLock(); undim(); }
 // Cache first, network second: something readable is on screen before the request
 // leaves. If the cache is empty or stale this is a no-op and refresh() fills it in.

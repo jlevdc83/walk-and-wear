@@ -4,7 +4,7 @@
 // a network round trip. Forecast calls are never cached here — staleness is handled
 // in app.js, which stores the last good reading and labels its age honestly.
 
-const CACHE = "walk-and-wear-v93";
+const CACHE = "walk-and-wear-v94";
 
 const SHELL = [
   "./",
@@ -46,6 +46,11 @@ self.addEventListener("fetch", (event) => {
   // Weather and geocoding always go to the network. A cached forecast served as if
   // fresh would be worse than no forecast — app.js owns that decision.
   if (url.hostname.endsWith("open-meteo.com") || url.hostname.endsWith("bigdatacloud.net")) return;
+
+  // The Pi's own endpoints are live state, not shell. Cache-first would hand back
+  // this morning's packages and yesterday's alarm state — and a cached /api/home was
+  // already a latent staleness window, found while adding /api/parcels.
+  if (url.pathname.includes("/api/")) return;
 
   // Same-origin shell: cache first, refresh in the background.
   if (url.origin === self.location.origin) {

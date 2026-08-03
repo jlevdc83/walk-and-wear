@@ -66,6 +66,22 @@ const SETTING_DEFAULTS = {
   //   compact — a single line: how many are low and which is worst
   battDisplay: "dials",      // percent at or under which a device counts as low
 
+  // Packages
+  // How the tile draws itself: compact is one line, list is the rows, full adds the
+  // chevrons and the two buttons. Only full can be acted on — see app.js.
+  parcelDisplay: "list",     // "compact" | "list" | "full"
+  parcelDays: 21,            // anything older than this stops being news
+  parcelShowReturns: true,
+  parcelShowGrocery: true,   // off if a minutes-long grocery lifecycle buries real packages
+  // The alert table, as numbers rather than constants — every one of them is a guess
+  // about how long a stall is normal, and guesses belong in settings.
+  parcelRefundDays: 14,      // received by the retailer, no refund: the classic lost return
+  parcelLabelDays: 3,        // a return label this close to expiry, still unsent
+  parcelExceptionHours: 0,   // failed delivery attempt. 0 = say so at once
+  parcelScanDays: 7,         // sent back, never scanned as received — watch, not alert
+  parcelSettleDays: 10,      // refunded, money still not posted
+  parcelGroceryHours: 2,     // how long a delivered grocery order stays on the tile
+
   // Bedside aperture, in mm. Defaults match build_integrated_frame.py.
   maskW: 124,
   maskH: 58,
@@ -184,6 +200,7 @@ const WIDGETS = [
   { id: "indoorair",  label: "Indoor air (Pi)", note: "The Levoit's reading" },
   { id: "indoorhum",  label: "Indoor humidity (Pi)", note: "Against the 60% target" },
   { id: "batteries",  label: "Batteries (Pi)",  note: "Anything low or flat — 18 devices report" },
+  { id: "parcels",    label: "Packages (Pi)",   note: "Deliveries, returns and refunds, from order email" },
 ];
 
 /// Open-Meteo's pollen is the CAMS *European* dataset, so every count is null
@@ -200,7 +217,10 @@ const POLLEN_KEY = "ww_pollen_covered";
 
 const LAYOUT_KEY = "dashboard_layout";
 const DEFAULT_LAYOUT = {
-  portrait: ["wear", "walk", "bring", "protect", "weather"],
+  // Packages is in the hand-held default and deliberately not in the bedside one:
+  // four tiles is already tight in that aperture, and a fifth clips. It is still
+  // draggable into bedside from the admin page — just not there by default.
+  portrait: ["wear", "walk", "bring", "protect", "weather", "parcels"],
   bedside:  ["walk", "weather", "lock", "batteries"],
 };
 
@@ -243,6 +263,13 @@ const ICONS = {
   battery: '<path d="M2.5 7h12v6h-12zM16.5 9.5v1"/>',
   leaf:    '<path d="M4 16C4 9 9 5 17 4c0 8-4 12-11 12zM4 16c2-3 5-5 8-6"/>',
   gauge:   '<path d="M4 15a6.5 6.5 0 1 1 12 0M10 15l3.5-4"/>',
+
+  // Packages. A box is the thing, a truck is the thing moving, the U-turn is a
+  // return, and the triangle is the one that costs money if it is ignored.
+  box:     '<path d="M10 3.2 3.2 6.6v6.8L10 16.8l6.8-3.4V6.6zM3.2 6.6 10 10l6.8-3.4M10 10v6.8"/>',
+  truck:   '<path d="M2.5 4.5h9v8.5h-9zM11.5 7.5h3.2l2.8 2.6v2.9h-6"/><circle cx="6" cy="15.2" r="1.6"/><circle cx="14" cy="15.2" r="1.6"/>',
+  returnArrow: '<path d="M7 5 3.5 8.5 7 12M3.5 8.5h8a4 4 0 0 1 0 8H7.5"/>',
+  alert:   '<path d="M10 3.4 17.8 17H2.2zM10 8.6v3.6M10 14.3v.2"/>',
 
   // Device types, for the battery list.
   camera:  '<path d="M2.5 6.5h9l1.5 2h4.5v8h-15zM7 12.5a2.5 2.5 0 1 0 5 0 2.5 2.5 0 0 0-5 0z"/>',
@@ -422,11 +449,37 @@ function sentence(text){
   return t ? t.charAt(0).toUpperCase() + t.slice(1) : t;
 }
 
+/// Everything else on the dashboard was written by Open-Meteo or by HOOBS. Package
+/// titles and mail subjects were written by whoever sent the email, so they are
+/// escaped before they reach innerHTML. Shared, because the admin page shows them too.
+function esc(s){
+  return String(s == null ? "" : s).replace(/[&<>"]/g,
+    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+}
+
 /// A stepped scale — for ordered categories where the number means little.
 function vizSteps(labels, activeIndex, tone){
   return `<span class="viz vizSteps ${tone || ""}">${labels.map((l, i) =>
     `<span class="vizStep${i <= activeIndex && activeIndex >= 0 ? " on" : ""}" title="${l}"></span>`
   ).join("")}<span class="vizStepLabel">${activeIndex >= 0 ? sentence(labels[activeIndex]) : "No reading"}</span></span>`;
+}
+
+/// A breadcrumb — for a ladder whose stages are named and only move forward. Dots
+/// would say how far along; angled segments say which way it is going, which is the
+/// part that matters when the question is whether a refund is still moving.
+///
+/// `opts.reversed` draws the last segment as the retrocharge branch: red, terminal,
+/// and pointing back the way it came. `opts.label` overrides the caption, because
+/// "Refunded" is the wrong word for money that was taken again.
+function vizChevron(stages, activeIndex, tone, opts){
+  const o = opts || {};
+  const rev = !!o.reversed;
+  const caption = o.label || (activeIndex >= 0 ? sentence(stages[activeIndex]) : "Not started");
+  const last = stages.length - 1;
+  return `<span class="viz vizChevron ${tone || ""}${rev ? " reversed" : ""}">${stages.map((s, i) =>
+    `<span class="vizChev${i < activeIndex ? " done" : ""}${i === activeIndex ? " on" : ""}${
+      rev && i === last ? " branch" : ""}" title="${s}"></span>`
+  ).join("")}<span class="vizChevLabel">${caption}</span></span>`;
 }
 
 /// A dial — for a percentage that has a target worth seeing the distance to.

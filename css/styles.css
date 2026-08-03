@@ -1287,6 +1287,84 @@ body.bedside .verdict { overflow-wrap: anywhere; }
 
 .battLine.pinned .battName::before, .battBar.pinned .battName::before { content: "◆ "; opacity: .6; }
 
+/* --- Packages -------------------------------------------------------------
+   Same three-mode shape as the batteries: one line, rows, or rows you can act on.
+   Only the full mode carries buttons — a tap target on a glance view would compete
+   with the long-press peek, and the glance views have nothing to decide. */
+
+.parcelRows { display: flex; flex-direction: column; gap: 6px; margin-top: 7px; min-width: 0; }
+.parcelRows.mode-compact { display: block; }
+.parcelRows.mode-full { gap: 12px; }
+.w .parcelRows {
+  border-top: 1px solid var(--glass-rim-low);
+  padding-top: 11px;
+  margin-top: 11px;
+}
+.w-large .parcelRows { margin-top: auto; }
+
+.parcelLine {
+  display: flex; align-items: baseline; gap: 8px; min-width: 0;
+  font-size: .78rem;
+}
+.parcelLine .devIcon { align-self: center; }
+.parcelName { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.parcelMeta {
+  flex: none; font-family: var(--mono); font-size: var(--fs-floor, .68rem);
+  color: var(--soft); font-variant-numeric: tabular-nums;
+}
+/* A tier is a state, not a colour swap: the row keeps its shape and gains weight. */
+.parcelLine.watch .parcelMeta { color: var(--sysYellow, #f0c05c); }
+.parcelLine.alert .parcelName, .parcelRow.alert .parcelName { font-weight: 600; }
+.parcelLine.alert .parcelMeta, .parcelRow.alert .parcelMeta { color: var(--sysRed, #f0705c); }
+/* Acknowledged is still on the tile — it is a record that you dealt with it, not a
+   reason to forget it — but it stops shouting. */
+.parcelLine.acked, .parcelRow.acked { opacity: .58; }
+
+.parcelRow { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.parcelWhy { font-size: .72rem; color: var(--soft); }
+.parcelRow.alert .parcelWhy { color: var(--sysOrange, #f0a35c); }
+.parcelActs { display: flex; flex-wrap: wrap; gap: 6px; }
+.parcelAct {
+  border: 1px solid var(--glass-rim-low); background: transparent; color: inherit;
+  border-radius: 99px; padding: 4px 11px; cursor: pointer;
+  font-family: var(--mono); font-size: var(--fs-floor, .68rem); letter-spacing: .02em;
+}
+.parcelAct.on { background: var(--glass-rim-low); color: var(--soft); }
+
+.parcelCompact { font-size: .95rem; font-weight: 600; }
+.parcelCompact.alert { color: var(--sysOrange, #f0a35c); }
+
+body.bedside .parcelRows { display: none; }   /* no room, and nothing to read across a room */
+
+/* The + in the tile header. Small, in the corner, and nowhere near the middle of the
+   card — the body of every tile belongs to the long-press peek. */
+.miniTools { display: inline-flex; align-items: center; gap: 8px; flex: none; }
+.miniAdd {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; padding: 0; line-height: 1;
+  border: 1px solid var(--glass-rim-low); border-radius: 99px;
+  background: transparent; color: var(--soft);
+  font-family: var(--sys); font-size: .95rem; cursor: pointer;
+}
+.miniAdd:hover, .miniAdd:focus-visible { color: var(--ink); background: var(--glass-tint); }
+.miniAdd:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+body.bedside .miniAdd { display: none; }   /* nothing is typed in from across a room */
+
+/* The add / edit form, wearing the locate card's clothes. */
+.parcelForm form { display: flex; flex-direction: column; gap: 0; }
+.parcelForm .row input[type="text"], .parcelForm .row input[type="date"] {
+  font-family: var(--sys); font-size: .95rem; color: var(--ink);
+  background: rgba(10, 16, 30, .3); border: 1px solid var(--glass-rim-low);
+  border-radius: 10px; padding: 9px 11px; width: 11rem; min-width: 0;
+}
+.parcelForm .rowLabel { flex: 1; min-width: 0; }
+.parcelForm .locateActions { margin-top: 16px; }
+/* Admin: the unmatched list has no checkbox, so the two-column pick grid would put
+   the sender beside the subject instead of under it. */
+.parcelUnmatched .widgetPick { display: block; cursor: default; }
+.parcelUnmatched .widgetName { display: block; font-size: .86rem; font-weight: 500; }
+.parcelUnmatched .widgetNote { display: block; font-family: var(--mono); }
+
 /* --- Widget indicators ---------------------------------------------------- */
 
 .miniHead { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
@@ -1454,6 +1532,28 @@ a.widgetsBtn { text-decoration: none; display: inline-flex; align-items: center;
   letter-spacing: .02em;  color: var(--soft);
 }
 
+/* Chevron breadcrumb — for a named ladder that only moves forward. The angle is the
+   information: dots would say how far along, arrows say which way it is going. */
+.vizChevron { display: flex; align-items: center; gap: 2px; flex-wrap: wrap; }
+.vizChev {
+  flex: 1 1 0; min-width: 10px; height: 8px;
+  background: currentColor; opacity: .16;
+  clip-path: polygon(0 0, calc(100% - 5px) 0, 100% 50%, calc(100% - 5px) 100%, 0 100%, 5px 50%);
+}
+.vizChev.done { opacity: .45; }
+.vizChev.on { background: var(--tone); opacity: 1; }
+/* The retrocharge branch: terminal, red, and pointing back the way it came. */
+.vizChevron.reversed .vizChev.branch {
+  background: var(--sysRed, #f0705c); opacity: 1;
+  clip-path: polygon(5px 0, 100% 0, calc(100% - 5px) 50%, 100% 100%, 5px 100%, 0 50%);
+}
+.vizChevLabel {
+  flex: 0 0 100%; margin-top: 4px;
+  font-family: var(--mono); font-size: var(--fs-floor);
+  letter-spacing: .02em; color: var(--soft);
+}
+.vizChevron.reversed .vizChevLabel { color: var(--sysRed, #f0705c); }
+
 /* Dial — a percentage you judge against a band or a target. */
 .vizGauge { width: 100%; max-width: 96px; height: auto; margin: 0 auto; overflow: visible; }
 .vizGauge .gTrack { fill: none; stroke: currentColor; opacity: .16; stroke-width: 6; stroke-linecap: round; }
@@ -1501,6 +1601,7 @@ a.widgetsBtn { text-decoration: none; display: inline-flex; align-items: center;
    captions that only work in the hand. */
 body.bedside .miniViz { padding-top: 4px; }
 body.bedside .vizStepLabel, body.bedside .vizRange .rEnds { display: none; }
+body.bedside .vizChevLabel { display: none; }
 body.bedside .vizGlyph svg { width: 9cqh; height: 9cqh; }
 body.bedside .vizGauge, body.bedside .vizSun { max-width: 26cqh; }
 

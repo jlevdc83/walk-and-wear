@@ -72,6 +72,61 @@
       </div>
     </section>
 
+    <!-- Adding a package by hand. Deliberately the same shape as the locate card
+         above rather than a new overlay system: this app asks its questions with a
+         glass card that takes the screen, because window.prompt() is suppressed in an
+         iOS standalone PWA and a second modal idiom would be a second thing to keep. -->
+    <section class="card glass locate parcelForm hidden" id="parcelFormCard"
+             role="dialog" aria-modal="true" aria-labelledby="parcelFormTitle">
+      <h2 class="cardLabel" id="parcelFormTitle">Track something</h2>
+      <p class="locateNote" id="parcelFormNote">
+        For anything the mail never mentioned — ordered by phone, bought in person, or a
+        confirmation that never arrived.
+      </p>
+      <form id="parcelEntry">
+        <label class="row">
+          <span class="rowLabel">What is it<em>The only part that is required</em></span>
+          <input type="text" id="pfTitle" maxlength="80" autocomplete="off" required
+                 placeholder="Anker charger">
+        </label>
+        <label class="row">
+          <span class="rowLabel">Retailer</span>
+          <input type="text" id="pfRetailer" maxlength="40" autocomplete="off" placeholder="Amazon">
+        </label>
+        <label class="row">
+          <span class="rowLabel">Type<em>Which ladder it walks</em></span>
+          <select id="pfKind">
+            <option value="package">Package</option>
+            <option value="return">Return</option>
+          </select>
+        </label>
+        <label class="row">
+          <span class="rowLabel">Stage<em>Where it is now. Nothing but you moves it, unless it has a tracking number the mail also mentions.</em></span>
+          <select id="pfStage"></select>
+        </label>
+        <label class="row">
+          <span class="rowLabel">Carrier</span>
+          <input type="text" id="pfCarrier" maxlength="20" autocomplete="off" placeholder="UPS">
+        </label>
+        <label class="row">
+          <span class="rowLabel">Tracking number<em>Given one, a carrier email can take this over and keep it current</em></span>
+          <input type="text" id="pfTracking" maxlength="40" autocomplete="off">
+        </label>
+        <label class="row">
+          <span class="rowLabel">Expected</span>
+          <input type="date" id="pfEta">
+        </label>
+        <label class="row hidden" id="pfAmountRow">
+          <span class="rowLabel">Refund due<em>What should come back, so a card credit can be matched to it</em></span>
+          <input type="number" id="pfAmount" min="0" step="0.01">
+        </label>
+        <p class="locateActions">
+          <button class="zipSubmit" type="submit">Save</button>
+          <button class="linkBtn" type="button" id="pfCancel">Cancel</button>
+        </p>
+      </form>
+    </section>
+
     <main class="wgrid" id="decisions">
 
       <section class="w w-medium glass decision wear" id="wearCard" data-widget="wear">
@@ -165,6 +220,21 @@
           <span class="miniSub" id="battSub">—</span>
           <div class="battRows" id="battRows"></div>
         </section>
+      <section class="w w-medium glass mini widgetOff" data-widget="parcels">
+          <span class="miniHead"><span class="miniLabel">Packages</span>
+            <span class="miniTools">
+              <!-- The mailbox only knows what a retailer chose to send. This is how
+                   anything else gets tracked. Hidden in the compact display, which is
+                   too small to hold a tap target that isn't the long-press peek. -->
+              <button class="miniAdd hidden" id="parcelAdd" type="button" aria-label="Add a package">+</button>
+              <span class="miniIcon" id="parcelsIcon" aria-hidden="true"></span>
+            </span>
+          </span>
+          <span class="miniValue" id="parcelsValue">—</span>
+          <span class="miniSub" id="parcelsSub">—</span>
+          <div class="parcelRows" id="parcelRows"></div>
+          <span class="miniViz" id="parcelsViz" aria-hidden="true"></span>
+        </section>
 
 
       <footer class="w w-medium glass weather" id="weather" data-widget="weather">
@@ -182,7 +252,7 @@
 
   </div>
 
-  <div class="buildMeta" id="buildMeta">v93</div>
+  <div class="buildMeta" id="buildMeta">v94</div>
 
   <script src="js/config.js"></script>
   <script src="js/app.js"></script>

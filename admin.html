@@ -232,6 +232,64 @@
       </p>
     </section>
 
+    <!-- Packages ------------------------------------------------------- -->
+    <section class="card glass adminCard">
+      <h2 class="cardLabel">Packages</h2>
+      <p class="adminNote" id="parcelNote">—</p>
+      <label class="row">
+        <span class="rowLabel">Display as<em>One line, the rows, or the rows with buttons. Acknowledging only works in Full.</em></span>
+        <select data-set="parcelDisplay">
+          <option value="compact">One line</option>
+          <option value="list">List</option>
+          <option value="full">Full</option>
+        </select>
+      </label>
+      <label class="row">
+        <span class="rowLabel">Look back<em>Days. Older than this stops being news — except an alert, which never ages out.</em></span>
+        <input type="number" min="3" max="90" step="1" data-set="parcelDays">
+      </label>
+      <label class="row">
+        <span class="rowLabel">Show returns<em>The whole lifecycle, to a refund that actually posted</em></span>
+        <input type="checkbox" data-set="parcelShowReturns">
+      </label>
+      <label class="row">
+        <span class="rowLabel">Show grocery<em>Off if a dozen minutes-long orders start burying real packages</em></span>
+        <input type="checkbox" data-set="parcelShowGrocery">
+      </label>
+
+      <p class="adminNote">
+        Below: how long a thing may sit still before the tile says so. Every one is a
+        guess about what normal looks like, which is why none of them is a constant.
+      </p>
+      <label class="row">
+        <span class="rowLabel">Refund not received<em>Days after the retailer had it back. Red — this is the window a claim still works in.</em></span>
+        <input type="number" min="3" max="60" step="1" data-set="parcelRefundDays">
+      </label>
+      <label class="row">
+        <span class="rowLabel">Return label expiring<em>Days left on an unsent label. Miss it and the refund is gone.</em></span>
+        <input type="number" min="1" max="14" step="1" data-set="parcelLabelDays">
+      </label>
+      <label class="row">
+        <span class="rowLabel">Delivery problem<em>Hours before a failed attempt is called out. 0 says so at once.</em></span>
+        <input type="number" min="0" max="48" step="1" data-set="parcelExceptionHours">
+      </label>
+      <label class="row">
+        <span class="rowLabel">No receive scan<em>Days after it went back. Amber — the carrier may just be slow.</em></span>
+        <input type="number" min="2" max="30" step="1" data-set="parcelScanDays">
+      </label>
+      <label class="row">
+        <span class="rowLabel">Refund not posted<em>Days after the refund was issued and the money still has not landed</em></span>
+        <input type="number" min="2" max="45" step="1" data-set="parcelSettleDays">
+      </label>
+      <label class="row">
+        <span class="rowLabel">Keep delivered grocery<em>Hours. About as long as it takes to unpack it.</em></span>
+        <input type="number" min="1" max="48" step="1" data-set="parcelGroceryHours">
+      </label>
+
+      <p class="adminNote" id="parcelUnmatchedNote" hidden></p>
+      <ul class="widgetList parcelUnmatched" id="parcelUnmatched"></ul>
+    </section>
+
     <!-- Move settings -------------------------------------------------- -->
     <section class="card glass adminCard">
       <h2 class="cardLabel">Move settings</h2>
